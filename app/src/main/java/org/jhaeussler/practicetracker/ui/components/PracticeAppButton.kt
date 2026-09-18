@@ -19,12 +19,27 @@ fun PracticeAppButton(
     fontSize: Int = 17,
     modifier: Modifier = Modifier
 ) {
+    PracticeAppButtonRawString(
+        onClick,
+        stringResource(text),
+        fontSize,
+        modifier
+    )
+}
+
+@Composable
+fun PracticeAppButtonRawString(
+    onClick: () -> Unit,
+    text: String,
+    fontSize: Int = 17,
+    modifier: Modifier = Modifier
+) {
     Button(
         onClick = onClick,
         modifier = modifier
     ) {
         Text(
-            text = stringResource(text),
+            text = text,
             fontSize = fontSize.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(vertical = 10.dp),

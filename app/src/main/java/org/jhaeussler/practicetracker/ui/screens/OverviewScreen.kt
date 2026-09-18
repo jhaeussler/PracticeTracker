@@ -45,7 +45,8 @@ import kotlin.math.floor
 fun OverviewScreen(
     timeViewModel: OverviewViewModel = viewModel(factory = AppViewModelProvider.Factory),
     onStatisticsBtnClicked: () -> Unit,
-    onAddTimeClicked: () -> Unit
+    onAddTimeClicked: () -> Unit,
+    onToMetronomeScreenClicked: () -> Unit,
 ) {
     val timeUiState by timeViewModel.overviewUiState.collectAsState()
     val timeEntries: List<PracticeTime> = timeUiState
@@ -177,6 +178,11 @@ fun OverviewScreen(
             thickness = 2.dp,
             color = Color.DarkGray,
             modifier = Modifier.fillMaxWidth(0.7f)
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        PracticeAppButton(
+            onClick  = onToMetronomeScreenClicked,
+            text = R.string.to_metronome_screen,
         )
         Spacer(modifier = Modifier.height(20.dp))
         Row (

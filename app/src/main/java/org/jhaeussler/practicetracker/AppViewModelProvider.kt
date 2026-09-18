@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import org.jhaeussler.practicetracker.ui.viewModels.DbDataViewModel
 import org.jhaeussler.practicetracker.ui.viewModels.EnterValueOnDateViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
 import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
 import org.jhaeussler.practicetracker.ui.viewModels.OverviewViewModel
 
@@ -31,6 +32,9 @@ object AppViewModelProvider {
         }
         initializer {
             DbDataViewModel(practiceTrackerApplication().container.practiceTimeRepository)
+        }
+        initializer {
+            MetronomeViewModel(practiceTrackerApplication().container.practiceTimeRepository)
         }
     }
 }
