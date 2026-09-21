@@ -50,9 +50,8 @@ class MetronomeEngine(
 
             // samplesPerBeat = sr * 60 / BPM
             // BPM = 133: samplesPerBeat = 44100 * 60 / 133 = 19894.7368
-            // rounded toInt() to 19894 -> dropping the .7368 -> drift after a while
             if (sampleIndexInBeat >= samplesPerBeat) {
-                // Preserves fractional remainder so no drift occurs due to rounding
+                // float substraction to preserves fractional remainder -> no drift due to rounding
                 sampleIndexInBeat -= samplesPerBeat
             }
         }
