@@ -16,6 +16,8 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.math.roundToInt
 
+const val SAMPLE_RATE = 44100
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class MetronomeServiceTest {
 
@@ -23,7 +25,7 @@ class MetronomeServiceTest {
 
     @Before
     fun setUp() {
-        engine = MetronomeEngine(sampleRate = 44100)
+        engine = MetronomeEngine(sampleRate = SAMPLE_RATE)
     }
 
     // --- StateFlow & BPM Validation Tests ---
@@ -65,7 +67,7 @@ class MetronomeServiceTest {
 
     @Test
     fun `clickSamples generates correct length and non-zero sine audio`() {
-        // 10ms at 44100Hz = 441 samples
+        // 10ms at 44100  = 441 samples
         assertEquals(441, engine.clickSamples.size)
 
         // First sample of sine(0) is 0, second sample must be positive audio signal
@@ -95,7 +97,7 @@ class MetronomeServiceTest {
     @Test
     fun `beat interval spacing matches expected sample distance for 120 BPM`() {
         val bpm = 120 // 0.5 sec per beat = 22,050 samples between ticks
-        val expectedSamplesPerBeat = 22050
+        val expectedSamplesPerBeat = SAMPLE_RATE  * 60 / bpm
 
         val totalBufferLength = 50000
         val pcmOutput = ShortArray(totalBufferLength)
@@ -111,7 +113,6 @@ class MetronomeServiceTest {
         }
 
         // Find indices of first non-zero sample of beat 1 and beat 2
-        val firstBeatIndex = 0 // Started at phase 0
         var secondBeatIndex = -1
 
         // Look for the start of the second beat (after the first click finishes)
@@ -130,7 +131,7 @@ class MetronomeServiceTest {
     fun `sub-sample fractional remainder prevents timing drift across 100 beats`() {
         // 133 BPM at 44100 Hz = 19,894.73684... samples per beat
         val bpm = 133
-        val exactSamplesPerBeat = 44100.0 * 60.0 / bpm
+        val exactSamplesPerBeat = SAMPLE_RATE.toFloat() * 60.0 / bpm
         val totalBeats = 100
 
         // Beat 0 is at sample 0.
@@ -186,8 +187,8 @@ class MetronomeServiceTest {
 
     @Test
     fun `changing BPM dynamically during playback changes sample density immediately`() {
-        val buffer60Bpm = ShortArray(44100)
-        val buffer120Bpm = ShortArray(44100)
+        val buffer60Bpm = ShortArray(SAMPLE_RATE)
+        val buffer120Bpm = ShortArray(SAMPLE_RATE)
 
         // Generate 1 second at 60 BPM (1 beat)
         engine.resetPhase()
@@ -201,5 +202,73 @@ class MetronomeServiceTest {
         val midpoint = 22051
         assertEquals(0.toShort(), buffer60Bpm[midpoint])
         assertNotEquals(0.toShort(), buffer120Bpm[midpoint])
+    }
+
+    @Test
+    fun `syncToHardwareClock does nothing when drift is under 1ms threshold`() {
+        val initialIndex = engine.sampleIndexInBeat
+
+        // 1 second elapsed = 44,100 expected samples
+        val elapsedNanos = 1_000_000_000L
+
+        // Physical samples played is only 20 samples off (less than 1ms threshold of 44.1 samples)
+        val physicalSamplesPlayed = SAMPLE_RATE - 20L
+
+        engine.syncToHardwareClock(elapsedNanos, physicalSamplesPlayed)
+
+        // Phase should remain unchanged
+        assertEquals(initialIndex, engine.sampleIndexInBeat, 0.0001)
+    }
+
+    @Test
+    fun `syncToHardwareClock advances phase when hardware is lagging behind wall clock`() {
+        val initialIndex = 100.0
+        engine.sampleIndexInBeat = initialIndex
+
+        // 1 second elapsed = 44,100 expected samples
+        val elapsedNanos = 1_000_000_000L
+
+        // Hardware is lagging behind by 100 samples
+        val physicalSamplesPlayed = SAMPLE_RATE - 100L
+
+        engine.syncToHardwareClock(elapsedNanos, physicalSamplesPlayed)
+
+        // Correction factor = 0.05
+        // Expected shift: sampleIndexInBeat -= (-100 * 0.05) -> sampleIndexInBeat += 5.0
+        val expectedIndex = initialIndex + 100 * 0.05
+        assertEquals(expectedIndex, engine.sampleIndexInBeat, 0.0001)
+    }
+
+    @Test
+    fun `syncToHardwareClock delays phase when hardware is running ahead of wall clock`() {
+        val initialIndex = 100.0
+        engine.sampleIndexInBeat = initialIndex
+
+        // 1 second elapsed = 44,100 expected samples
+        val elapsedNanos = 1_000_000_000L
+
+        // Hardware is ahead behind by 100 samples
+        val physicalSamplesPlayed = SAMPLE_RATE + 100L
+
+        engine.syncToHardwareClock(elapsedNanos, physicalSamplesPlayed)
+
+        // Correction factor = 0.05
+        // Expected shift: sampleIndexInBeat -= (100 * 0.05) -> sampleIndexInBeat -= 5.0
+        val expectedIndex = initialIndex - 100 * 0.05
+        assertEquals(expectedIndex, engine.sampleIndexInBeat, 0.0001)
+    }
+
+    @Test
+    fun `resetPhase resets sample index and generated count`() {
+        val buffer = ShortArray(512)
+        engine.fillNextChunk(buffer, bpm = 120)
+
+        assertTrue(engine.totalSamplesGenerated > 0)
+        assertTrue(engine.sampleIndexInBeat > 0.0)
+
+        engine.resetPhase()
+
+        assertEquals(0L, engine.totalSamplesGenerated)
+        assertEquals(0.0, engine.sampleIndexInBeat, 0.0)
     }
 }

@@ -32,9 +32,27 @@ class MetronomeEngine(
     }
 
     var sampleIndexInBeat = 0.0
+    var totalSamplesGenerated: Long = 0
+        private set
 
     fun resetPhase() {
         sampleIndexInBeat = 0.0
+        totalSamplesGenerated = 0
+    }
+
+    val samplesPerMs = sampleRate / 1000.0
+    // hard-resetting to 0 ms drift would create audible artifacts
+    // so only correct the drift slightly
+    val driftCorrectionFactor = 0.05
+    fun syncToHardwareClock(elapsedNanos: Long, hardwareSamplesPlayed: Long)
+    {
+        val expectedTotalSamples = (elapsedNanos / 1_000_000_000.0) * sampleRate
+        val driftInSamples = hardwareSamplesPlayed - expectedTotalSamples
+
+        // Apply a gentle low-pass nudge if drift exceeds 1ms
+        if (kotlin.math.abs(driftInSamples) > samplesPerMs) {
+            sampleIndexInBeat -= driftInSamples * driftCorrectionFactor
+        }
     }
 
     fun fillNextChunk(buffer: ShortArray, bpm: Int) {
@@ -45,13 +63,14 @@ class MetronomeEngine(
         {
             val currentSampleIndexAsInt = sampleIndexInBeat.toInt()
 
-            if (sampleIndexInBeat < clickSamples.size) {
+            if (currentSampleIndexAsInt in clickSamples.indices) {
                 buffer[i] = clickSamples[currentSampleIndexAsInt]
             } else {
                 buffer[i] = 0
             }
 
             sampleIndexInBeat += 1.0
+            totalSamplesGenerated++
 
             // samplesPerBeat = sr * 60 / BPM
             // BPM = 133: samplesPerBeat = 44100 * 60 / 133 = 19894.7368
