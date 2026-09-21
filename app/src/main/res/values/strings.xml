@@ -45,4 +45,14 @@
     <string name="backup_db_btn_text">Backup</string>
     <string name="import_db_backup">Import</string>
     <string name="no_entries_yet_txt">No entries yet.</string>
+    <string name="metronom_screen">metronome_screen</string>
+    <string name="to_metronome_screen">Metronome</string>
+    <string name="metronome_screen_title">Metronome</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="bpm">BPM</string>
+    <string name="number_30">30</string>
+    <string name="number_60">60</string>
+    <string name="number_90">90</string>
+    <string name="number_120">120</string>
 </resources>

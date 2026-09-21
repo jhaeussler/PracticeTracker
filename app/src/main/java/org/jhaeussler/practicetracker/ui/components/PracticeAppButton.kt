@@ -16,15 +16,30 @@ import androidx.compose.ui.unit.sp
 fun PracticeAppButton(
     onClick: () -> Unit,
     @StringRes text: Int,
-    fontSize: Int = 17,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fontSize: Int = 17
+) {
+    PracticeAppButtonRawString(
+        onClick,
+        stringResource(text),
+        modifier,
+        fontSize
+    )
+}
+
+@Composable
+fun PracticeAppButtonRawString(
+    onClick: () -> Unit,
+    text: String,
+    modifier: Modifier = Modifier,
+    fontSize: Int = 17
 ) {
     Button(
         onClick = onClick,
         modifier = modifier
     ) {
         Text(
-            text = stringResource(text),
+            text = text,
             fontSize = fontSize.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(vertical = 10.dp),

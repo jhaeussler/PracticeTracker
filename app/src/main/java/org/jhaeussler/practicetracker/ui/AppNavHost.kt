@@ -18,6 +18,7 @@ import org.jhaeussler.practicetracker.ui.screens.datascreens.GeneralStatisticsSc
 import org.jhaeussler.practicetracker.ui.screens.datascreens.AllTimeDataScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.CurrentWeekDataScreen
 import org.jhaeussler.practicetracker.ui.screens.EntryListScreen
+import org.jhaeussler.practicetracker.ui.screens.MetronomeScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.ExtraInfoScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.WeeklyDataScreen
 import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
@@ -31,7 +32,9 @@ enum class AppDestination(val title: Int) {
     CurrentWeekStatsScreen(title = R.string.current_week_stats_destination),
     WeeklyStatsScreen(title = R.string.weekly_stats_destination),
     ExtraInfoScreen(title = R.string.extra_info_destination),
-    EntryListScreen(title = R.string.entry_list_destination)
+    EntryListScreen(title = R.string.entry_list_destination),
+
+    MetronomeScreen(title = R.string.metronom_screen)
 }
 
 @SuppressLint("UnrememberedGetBackStackEntry")
@@ -110,6 +113,7 @@ fun PracticeAppNavHost(navController: NavHostController)
         composable(route = AppDestination.OverviewScreen.name) {
             OverviewScreen (
                 onAddTimeClicked = { navController.navigate(AppDestination.EnterTimeScreen.name) },
+                onToMetronomeScreenClicked = { navController.navigate(AppDestination.MetronomeScreen.name) },
                 onStatisticsBtnClicked = {
                     navController.navigate(AppDestination.StatisticsRoute.name)
                 }
@@ -117,6 +121,11 @@ fun PracticeAppNavHost(navController: NavHostController)
         }
         composable(route = AppDestination.EnterTimeScreen.name) {
             EnterValueOnDateScreen (
+                navigateBack = { navController.navigateUp() },
+            )
+        }
+        composable(AppDestination.MetronomeScreen.name) { backStackEntry->
+            MetronomeScreen(
                 navigateBack = { navController.navigateUp() },
             )
         }
