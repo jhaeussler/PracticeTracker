@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.concurrent.thread
-import kotlin.math.sin
 
 class MetronomeService : Service() {
 
@@ -131,7 +130,8 @@ class MetronomeService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Metronome Running")
             .setContentText("Tap to open app")
-            .setSmallIcon(android.R.drawable.ic_media_play) // Replace with your drawable icon
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(contentIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(
@@ -201,13 +201,16 @@ class MetronomeService : Service() {
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
-        while (isRunning.value)
-        {
+        while (isRunning.value) {
             engine.fillNextChunk(buffer, bpm.value)
             audioTrack.write(buffer, 0, chunkSize)
         }
 
-        audioTrack.stop()
-        audioTrack.release()
+        try {
+            audioTrack.stop()
+            audioTrack.release()
+        } catch (e: Exception) {
+            // Handle potential teardown exceptions safely
+        }
     }
 }

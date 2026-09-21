@@ -7,6 +7,7 @@ package org.jhaeussler.practicetracker.timerservice
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
@@ -117,11 +118,20 @@ class PracticeTimerService : Service() {
     }
 
     private fun startForegroundService() {
+        val contentIntent = packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
+            PendingIntent.getActivity(
+                this,
+                0,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
         // Create the notification builder
         notificationBuilder =
             NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Ongoing Practice Session...")
             .setContentText(getTimerNotificationText())
+            .setContentIntent(contentIntent)
             .setSmallIcon(R.drawable.timelapse)
             .setPriority(NotificationCompat.PRIORITY_LOW) // Use low priority for background tasks
             .setOngoing(true) // Make the notification persistent

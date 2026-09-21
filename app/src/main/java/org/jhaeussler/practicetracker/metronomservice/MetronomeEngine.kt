@@ -11,7 +11,8 @@ import kotlin.math.sin
 class MetronomeEngine(
     val sampleRate: Int = 44100,
     val clickDurationMs: Int = 10,
-    val toneFrequencyHz: Double = 1000.0
+    val toneFrequencyHz: Double = 1000.0,
+    var enableWallClockSync: Boolean = true
 ) {
     // Pre-generate a short 1000 Hz sine wave click (10ms duration)
     val clickSamples: ShortArray by lazy {
@@ -32,9 +33,18 @@ class MetronomeEngine(
     }
 
     var sampleIndexInBeat = 0.0
+    var totalSamplesGenerated: Long = 0
+        private set
+
+    // Tracks target timing relative to system uptime
+    private var startTimeNanos: Long = 0
+    private var beatsDelivered: Long = 0
 
     fun resetPhase() {
         sampleIndexInBeat = 0.0
+        totalSamplesGenerated = 0
+        startTimeNanos = System.nanoTime()
+        beatsDelivered = 0
     }
 
     fun fillNextChunk(buffer: ShortArray, bpm: Int) {
@@ -45,19 +55,37 @@ class MetronomeEngine(
         {
             val currentSampleIndexAsInt = sampleIndexInBeat.toInt()
 
-            if (sampleIndexInBeat < clickSamples.size) {
+            if (currentSampleIndexAsInt in clickSamples.indices) {
                 buffer[i] = clickSamples[currentSampleIndexAsInt]
             } else {
                 buffer[i] = 0
             }
 
             sampleIndexInBeat += 1.0
+            totalSamplesGenerated++
 
             // samplesPerBeat = sr * 60 / BPM
             // BPM = 133: samplesPerBeat = 44100 * 60 / 133 = 19894.7368
             if (sampleIndexInBeat >= samplesPerBeat) {
+                beatsDelivered++
+
+                // only apply phase correction mechanism if the corresponding flag is set
+                val phaseCorrection = if (enableWallClockSync) {
+                    // Calculate where sampleIndexInBeat SHOULD be based on nanosecond wall clock
+                    val elapsedNanos = System.nanoTime() - startTimeNanos
+                    val targetBeats = (elapsedNanos / 1_000_000_000.0) * (bpm / 60.0)
+                    val driftInBeats = beatsDelivered - targetBeats
+
+                    driftInBeats * 0.01 // Gentle 1% nudge during silence
+                }
+                else {
+                    0.0
+                }
+
                 // float substraction to preserves fractional remainder -> no drift due to rounding
-                sampleIndexInBeat -= samplesPerBeat
+                // phase correction will adjust the silence length
+                // to compensate to hardware clock inaccuracy
+                sampleIndexInBeat = (sampleIndexInBeat - samplesPerBeat) + phaseCorrection
             }
         }
     }
