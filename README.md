@@ -16,12 +16,16 @@ The architecture follows the Model-View-ViewModel approach common for Compose-Ap
 
 ## Requirements ##
 
-The minimum OS-Version to run the App is Android 13.0 (API 33) and it supports newer versions up to Android 16. To build it you need JDK >= 17, SDK 37 and a build environment supporting gradle plugin v.9.2.1 (Android Studio Panda 4 or Quail 1). Also Kotlin >= 2.0.0 is required.
+The minimum OS-Version to run the App is Android 13.0 (API 33) and it supports newer versions up to Android 16. To build it you need:
+- JDK >= 17
+- Android SDK 37
+- Kotlin >= 2.0.0
+- A build environment supporting Android Gradle Plugin v9.2.1 (Android Studio Panda 4 or Quail 1)
 
-*Note: Currently the app needs androidx.media:media:1.7.1 and is incompatible with newer versions of this lib because the MediaSessionCompat used by the TimerService is deprecated in v1.8*
+*Note: Currently the app needs androidx.media:media:1.7.1 and is incompatible with newer versions of this lib because the MediaSessionCompat used by the PracticeTimerService is deprecated in v1.8*
 
 ## Disclaimers and license ##
 
-Disclaimer: Google Gemnini was used during the implementation of this project.
+> **Disclaimer:** Google Gemini was used during the development of this project.
 
-This project is licensed under the MIT License. It relies on third-party libraries (like AndroidX and JUnit) which are governed by their respective Apache 2.0 and EPL licenses.
+This project is licensed under the MIT License. It relies on third-party This project is licensed under the **MIT License**. It relies on third-party libraries and tools (such as AndroidX, Jetpack Compose, KotlinX Coroutines, MockK, Turbine, Room, and JUnit), which are governed by their respective **Apache 2.0** and **EPL 1.0** open-source licenses.

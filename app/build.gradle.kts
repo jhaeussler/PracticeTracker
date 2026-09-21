@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 J. Häußler
+ */
+
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp") version "2.3.2"
