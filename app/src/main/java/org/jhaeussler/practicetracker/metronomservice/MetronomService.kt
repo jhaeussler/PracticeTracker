@@ -158,24 +158,7 @@ class MetronomeService : Service() {
     }
 
     private var audioThread: Thread? = null
-
-    // Pre-generate a short 1000 Hz sine wave click (10ms duration)
-    private val clickSamples: ShortArray by lazy {
-        val durationMs = 10
-        val numSamples = ((SAMPLE_RATE / 1000.0) * durationMs).toInt()
-        val samples = ShortArray(numSamples)
-        val frequency = 1000.0 // 1 kHz tone
-        for (i in 0 until numSamples) {
-            // sin (2 * pi * x) -> sinus with amplitude 1 und period 1
-            // sin (2 * pi * x / sr) -> will give us period of 44100 (samples)
-            // -> multiply with Hz we actually want to compress the sin curve
-            val angle = 2.0 * Math.PI * i * frequency / SAMPLE_RATE
-            // Scale to 16-bit short max value (~32767) with a slight fade out
-            val envelope = 1.0 - (i.toDouble() / numSamples)
-            samples[i] = (sin(angle) * Short.MAX_VALUE * envelope).toInt().toShort()
-        }
-        samples
-    }
+    private val engine = MetronomeEngine(SAMPLE_RATE)
 
     private fun runAudioLoop()
     {
@@ -207,39 +190,15 @@ class MetronomeService : Service() {
             .build()
 
         audioTrack.play()
+        engine.resetPhase()
 
         // Fixed chunk size for writing to the hardware buffer
         val chunkSize = 512
-        var sampleIndexInBeat = 0.0
-
         val buffer = ShortArray(chunkSize)
 
-        while (isRunning.value) {
-            // 1. Calculate how many silent samples belong between ticks for current BPM
-            val samplesPerBeat = (SAMPLE_RATE * 60.0 / bpm.value).toInt()
-
-            for (i in 0 until chunkSize)
-            {
-                val currentSampleIndexAsInt = sampleIndexInBeat.toInt()
-
-                if (sampleIndexInBeat < clickSamples.size) {
-                    buffer[i] = clickSamples[currentSampleIndexAsInt]
-                } else {
-                    buffer[i] = 0
-                }
-
-                sampleIndexInBeat += 1.0
-
-                // samplesPerBeat = sr * 60 / BPM
-                // BPM = 133: samplesPerBeat = 44100 * 60 / 133 = 19894.7368
-                // rounded toInt() to 19894 -> dropping the .7368 -> drift after a while
-                if (sampleIndexInBeat >= samplesPerBeat)
-                {
-                    // Preserves fractional remainder so no drift occurs due to rounding
-                    sampleIndexInBeat -= samplesPerBeat
-                }
-            }
-
+        while (isRunning.value)
+        {
+            engine.fillNextChunk(buffer, bpm.value)
             audioTrack.write(buffer, 0, chunkSize)
         }
 

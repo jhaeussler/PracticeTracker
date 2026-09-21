@@ -172,7 +172,6 @@ fun OverviewScreen(
                 modifier = Modifier.padding(vertical = 10.dp).padding(horizontal = 20.dp)
             )
         }
-
         Spacer(modifier = Modifier.height(20.dp))
         HorizontalDivider(
             thickness = 2.dp,
@@ -183,6 +182,14 @@ fun OverviewScreen(
         PracticeAppButton(
             onClick  = onToMetronomeScreenClicked,
             text = R.string.to_metronome_screen,
+            fontSize = 21,
+            modifier = Modifier.height(75.dp).fillMaxWidth(0.5f)
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        HorizontalDivider(
+            thickness = 2.dp,
+            color = Color.DarkGray,
+            modifier = Modifier.fillMaxWidth(0.7f)
         )
         Spacer(modifier = Modifier.height(20.dp))
         Row (
