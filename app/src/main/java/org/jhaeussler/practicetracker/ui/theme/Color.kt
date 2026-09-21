@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 J. Häußler
+ */
+
 package org.jhaeussler.practicetracker.ui.theme
 
 import androidx.compose.ui.graphics.Color

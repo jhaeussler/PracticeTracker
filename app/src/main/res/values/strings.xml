@@ -1,3 +1,8 @@
+<!--
+  ~ SPDX-License-Identifier: MIT
+  ~ Copyright (c) 2026 J. Häußler
+  -->
+
 <resources>
     <string name="app_name">PracticeTracker</string>
     <string name="time_input_field_label">Enter time in h</string>

@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 J. Häußler
+ */
+
 package org.jhaeussler.practicetracker.metronomservice
 
 import app.cash.turbine.test
