@@ -33,7 +33,7 @@
         </activity>
 
         <service
-            android:name="org.jhaeussler.practicetracker.timerservice.PracticeTimerService"
+            android:name="org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="false" />
 

@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.timerservice
+package org.jhaeussler.practicetracker.sessiontimerservice
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -23,7 +23,7 @@ import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.utils.secondsToNiceString
 import java.time.LocalDate
 
-class PracticeTimerService : Service() {
+class SessionTimerService : Service() {
 
     enum class TimerState { STOPPED, RUNNING, PAUSED }
 
@@ -111,7 +111,7 @@ class PracticeTimerService : Service() {
     override fun onBind(intent: Intent?): IBinder = TimerBinder()
 
     inner class TimerBinder : Binder() {
-        fun getService(): PracticeTimerService = this@PracticeTimerService
+        fun getService(): SessionTimerService = this@SessionTimerService
     }
 
     private fun startForegroundService() {
@@ -153,7 +153,7 @@ class PracticeTimerService : Service() {
 
     private fun getIntentForAction( actionToSet: String) : Intent {
         val intent = Intent(this,
-            PracticeTimerService::class.java).apply { action = actionToSet }
+            SessionTimerService::class.java).apply { action = actionToSet }
         return intent
     }
 

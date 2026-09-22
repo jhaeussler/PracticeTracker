@@ -19,7 +19,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
-import org.jhaeussler.practicetracker.timerservice.PracticeTimerService
+import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
 import org.jhaeussler.practicetracker.utils.HoursAndMins
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,19 +47,19 @@ class OverviewViewModel (
 
     // Timer service binding
 
-    private var timerServiceWeakRef: WeakReference<PracticeTimerService>? = null
-    val timerService: PracticeTimerService? get() = timerServiceWeakRef?.get()
+    private var timerServiceWeakRef: WeakReference<SessionTimerService>? = null
+    val timerService: SessionTimerService? get() = timerServiceWeakRef?.get()
 
     private var isServiceBound = false
     private var serviceConnection: ServiceConnection = object : ServiceConnection
     {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?)
         {
-            val binder = service as PracticeTimerService.TimerBinder
+            val binder = service as SessionTimerService.TimerBinder
             timerServiceWeakRef = WeakReference(binder.getService())
             isServiceBound = true
 
-            timerService?.setTimerCallback(object : PracticeTimerService.TimerCallback {
+            timerService?.setTimerCallback(object : SessionTimerService.TimerCallback {
                 override fun onTimerTick(elapsedTime: Long) {
                     _elapsedTime.value = elapsedTime // Update StateFlow
                     updateTimerState()
@@ -84,10 +84,10 @@ class OverviewViewModel (
     {
         if (isServiceBound) return
 
-        val serviceStartIntent = Intent(getApplication(), PracticeTimerService::class.java)
+        val serviceStartIntent = Intent(getApplication(), SessionTimerService::class.java)
         getApplication<Application>().startService(serviceStartIntent)
 
-        val bindToServiceIntent = Intent(getApplication(), PracticeTimerService::class.java)
+        val bindToServiceIntent = Intent(getApplication(), SessionTimerService::class.java)
         getApplication<Application>().bindService(
             bindToServiceIntent,
             serviceConnection,
