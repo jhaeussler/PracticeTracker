@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewModels
+package org.jhaeussler.practicetracker.ui.viewmodels
 
 import android.content.Context
 import android.content.Intent
@@ -14,11 +14,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 
-import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
 import org.jhaeussler.practicetracker.metronomservice.MetronomeService
 
 class MetronomeViewModel(
-    private val practiceTimeRepository: PracticeTimeRepository
 ) : ViewModel() {
 
     val isMetronomeRunning: StateFlow<Boolean> = MetronomeService.isRunning

@@ -32,7 +32,7 @@ import org.jhaeussler.practicetracker.triggerAppRestart
 import org.jhaeussler.practicetracker.ui.components.DurationEntryList
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
-import org.jhaeussler.practicetracker.ui.viewModels.DbDataViewModel
+import org.jhaeussler.practicetracker.ui.viewmodels.DbDataViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

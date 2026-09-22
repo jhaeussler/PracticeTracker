@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
-import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.ui.viewmodels.statisticsData.StatisticsViewModel
 import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScrollableTable

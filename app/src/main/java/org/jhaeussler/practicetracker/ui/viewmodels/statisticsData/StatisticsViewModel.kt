@@ -3,11 +3,10 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewModels.statisticsData
+package org.jhaeussler.practicetracker.ui.viewmodels.statisticsData
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 
 class StatisticsViewModel(
-    private val practiceTimeRepository: PracticeTimeRepository
+    practiceTimeRepository: PracticeTimeRepository
 ) : ViewModel()
 {
     val statsUiState: StateFlow<Analyzer> =
@@ -27,7 +26,7 @@ class StatisticsViewModel(
             )
         }.stateIn(
                 scope = viewModelScope,
-                started = SharingStarted.Companion.WhileSubscribed(TIMEOUT_MILLIS),
+                started = SharingStarted.WhileSubscribed(TIMEOUT_MILLIS),
                 initialValue = Analyzer(
                     dbEntries = listOf(),
                     currentDate = LocalDate.now()

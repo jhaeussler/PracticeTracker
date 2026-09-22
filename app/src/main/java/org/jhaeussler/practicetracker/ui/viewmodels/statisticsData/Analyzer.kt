@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewModels.statisticsData
+package org.jhaeussler.practicetracker.ui.viewmodels.statisticsData
 
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import java.time.DayOfWeek
@@ -283,8 +283,5 @@ data class WeekOfYear(
         fun fromLocalDate(date : LocalDate) : WeekOfYear {
             return WeekOfYear(date.get(WeekFields.of(Locale.GERMAN).weekOfYear()), date.year)
         }
-    }
-    fun asString() : String {
-        return "KW $kw of $year"
     }
 }

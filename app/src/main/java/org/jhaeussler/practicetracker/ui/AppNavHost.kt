@@ -26,7 +26,7 @@ import org.jhaeussler.practicetracker.ui.screens.EntryListScreen
 import org.jhaeussler.practicetracker.ui.screens.MetronomeScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.ExtraInfoScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.WeeklyDataScreen
-import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.ui.viewmodels.statisticsData.StatisticsViewModel
 
 enum class AppDestination(val title: Int) {
     OverviewScreen(title = R.string.overview_destination),
@@ -62,7 +62,7 @@ fun NavGraphBuilder.statisticsGraph(navController: NavController) {
         startDestination = AppDestination.GeneralStatisticsScreen.name,
         route = AppDestination.StatisticsRoute.name
     ) {
-        composable(AppDestination.GeneralStatisticsScreen.name) { backStackEntry ->
+        composable(AppDestination.GeneralStatisticsScreen.name) { _ ->
             GeneralStatisticsScreen(
                 navigateToAllTimeStatScreen = {
                     navController.navigate(AppDestination.AllTimeStatsScreen.name)
@@ -82,27 +82,27 @@ fun NavGraphBuilder.statisticsGraph(navController: NavController) {
                 viewModel = getStatisticsViewModel(navController)
             )
         }
-        composable(AppDestination.AllTimeStatsScreen.name) { backStackEntry->
+        composable(AppDestination.AllTimeStatsScreen.name) { _->
             AllTimeDataScreen(
                 viewModel = getStatisticsViewModel(navController)
             )
         }
-        composable(AppDestination.CurrentWeekStatsScreen.name) { backStackEntry->
+        composable(AppDestination.CurrentWeekStatsScreen.name) { _->
             CurrentWeekDataScreen(
                 viewModel = getStatisticsViewModel(navController)
             )
         }
-        composable(AppDestination.WeeklyStatsScreen.name) { backStackEntry->
+        composable(AppDestination.WeeklyStatsScreen.name) { _->
             WeeklyDataScreen(
                 viewModel = getStatisticsViewModel(navController)
             )
         }
-        composable(AppDestination.ExtraInfoScreen.name) { backStackEntry->
+        composable(AppDestination.ExtraInfoScreen.name) { _->
             ExtraInfoScreen(
                 viewModel = getStatisticsViewModel(navController)
             )
         }
-        composable(AppDestination.EntryListScreen.name) { backStackEntry->
+        composable(AppDestination.EntryListScreen.name) { _->
             EntryListScreen()
         }
     }
@@ -129,9 +129,8 @@ fun PracticeAppNavHost(navController: NavHostController)
                 navigateBack = { navController.navigateUp() },
             )
         }
-        composable(AppDestination.MetronomeScreen.name) { backStackEntry->
+        composable(AppDestination.MetronomeScreen.name) { _->
             MetronomeScreen(
-                navigateBack = { navController.navigateUp() },
             )
         }
         statisticsGraph(navController)

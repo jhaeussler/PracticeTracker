@@ -40,12 +40,11 @@ import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButtonRawString
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
-import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
+import org.jhaeussler.practicetracker.ui.viewmodels.MetronomeViewModel
 
 @Composable
 fun MetronomeScreen(
-    metronomeViewModel: MetronomeViewModel = viewModel(factory = AppViewModelProvider.Factory),
-    navigateBack: () -> Unit
+    metronomeViewModel: MetronomeViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val context = LocalContext.current
 

@@ -46,6 +46,12 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all { test ->
+                test.jvmArgs(
+                    "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+                    "--add-opens=java.base/java.io=ALL-UNNAMED"
+                )
+            }
         }
     }
 }
