@@ -44,6 +44,7 @@ import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.viewModels.OverviewViewModel
 import org.jhaeussler.practicetracker.utils.secondsToNiceString
 import kotlinx.coroutines.launch
+import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
 import kotlin.math.floor
 
 @Composable
@@ -57,9 +58,8 @@ fun OverviewScreen(
     val timeEntries: List<PracticeTime> = timeUiState
     val totalHours: Double = if(timeEntries.isNotEmpty()) timeEntries.sumOf{ it.value } else 0.0
 
-    val practiceOngoing by timeViewModel.isRunning.collectAsState()
-    val practicePaused by timeViewModel.isPaused.collectAsState()
-    val currentPracticeTime by timeViewModel.elapsedTime.collectAsState()
+    val timerState by timeViewModel.timerState.collectAsState()
+    val currentPracticeTime by timeViewModel.elapsedTimeSec.collectAsState()
 
     val showCloseSessionDiag by timeViewModel.showConfirmSessionEndDiag.collectAsState()
     val showSessionEndErrorDiag by timeViewModel.showSessionEndErrorDiag.collectAsState()
@@ -98,16 +98,17 @@ fun OverviewScreen(
                     timeViewModel.requestTimerService() { permission ->
                     requestPermissionLauncher.launch(permission) }
                 },
-                text = when {
-                    practiceOngoing -> R.string.practice_session_running
-                    practicePaused -> R.string.resume_practice_session
+                text = when (timerState) {
+                    SessionTimerService.TimerState.RUNNING -> R.string.practice_session_running
+                    SessionTimerService.TimerState.PAUSED -> R.string.resume_practice_session
                     else -> R.string.start_practice_session
                 },
                 fontSize = 27,
                 modifier = Modifier.fillMaxWidth(0.7f).height(70.dp)
             )
         }
-        if(practiceOngoing || practicePaused) {
+        if (timerState != SessionTimerService.TimerState.STOPPED)
+        {
             Spacer(modifier = Modifier.height(20.dp))
             HorizontalDivider(
                 thickness = 2.dp,
@@ -218,17 +219,16 @@ fun OverviewScreen(
     }
     when {
         showCloseSessionDiag -> {
-            val sessionTime: Double? = timeViewModel.getSessionTime()
+            val sessionTime: Double = timeViewModel.getSessionTime()
 
             AlertDialog(
-                //icon = { Icon(icon, contentDescription = "Example Icon") },
                 title = {
                     Text(text = stringResource(R.string.close_session_btn_text))
                 },
                 text = {
                     Text(text = stringResource(
                         R.string.close_session_diag_text,
-                        sessionTime?: -1.0)
+                        sessionTime)
                     )
                 },
                 onDismissRequest = {
@@ -239,12 +239,10 @@ fun OverviewScreen(
                         colors = ButtonDefaults.textButtonColors()
                             .copy(contentColor = okBtnColor),
                         onClick = {
-                            if(sessionTime != null) {
-                                coroutineScope.launch {
-                                    timeViewModel.endSession()
-                                }
-                                timeViewModel.resetDialogFlags()
+                            coroutineScope.launch {
+                                timeViewModel.endSession()
                             }
+                            timeViewModel.resetDialogFlags()
                         }
                     ) {
                         Text(stringResource(R.string.confirm_btn_txt))
