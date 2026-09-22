@@ -33,9 +33,9 @@
         </activity>
 
         <service
-            android:name="org.jhaeussler.practicetracker.timerservice.PracticeTimerService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"/>
+            android:name="org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
 
         <service
             android:name="org.jhaeussler.practicetracker.metronomservice.MetronomeService"
