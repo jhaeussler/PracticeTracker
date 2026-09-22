@@ -16,9 +16,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
+import androidx.media3.session.MediaSession
+import androidx.media3.exoplayer.ExoPlayer
 import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.utils.secondsToNiceString
 import java.time.LocalDate
@@ -31,7 +31,12 @@ class PracticeTimerService : Service() {
         const val TIMER_TICK = 1000L
         const val NOTIFICATION_ID = 42
         const val CHANNEL_ID = "practice_timer_channel"
+
+        const val ACTION_START = "ACTION_START"
+        const val ACTION_PAUSE = "ACTION_PAUSE"
+        const val ACTION_RESET = "ACTION_RESET"
     }
+
     private var elapsedTimeSec = 0L
     private var sessionStartTimeMillis = 0L
     private var nextTickTimeMillis = 0L
@@ -41,9 +46,10 @@ class PracticeTimerService : Service() {
     private var sessionStartDate: LocalDate? = null
     private var timerState = TimerState.STOPPED
 
-    private lateinit var notificationBuilder: NotificationCompat.Builder
     private val handler = Handler(Looper.getMainLooper())
-    private lateinit var mediaSession: MediaSessionCompat
+
+    private var player: ExoPlayer? = null
+    private var mediaSession: MediaSession? = null
 
     private val timerRunnable = object : Runnable {
         override fun run() {
@@ -84,17 +90,21 @@ class PracticeTimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        setupMediaSession()
+
+        player = ExoPlayer.Builder(this).build()
+        mediaSession = MediaSession.Builder(this, player!!).build()
     }
 
     override fun onDestroy() {
         handler.removeCallbacks(timerRunnable)
         stopTimer()
 
-        if (::mediaSession.isInitialized) {
-            mediaSession.isActive = false
-            mediaSession.release()
+        mediaSession?.run {
+            player.release()
+            release()
+            mediaSession = null
         }
+
         super.onDestroy()
     }
 
@@ -104,73 +114,107 @@ class PracticeTimerService : Service() {
         fun getService(): PracticeTimerService = this@PracticeTimerService
     }
 
-    private fun setupMediaSession() {
-        mediaSession = MediaSessionCompat(this, "PracticeTimerTag").apply {
-            // some default state is needed
-            setPlaybackState(
-                PlaybackStateCompat.Builder()
-                    .setState(PlaybackStateCompat.STATE_STOPPED, 0, 1.0f)
-                    // Minimal actions to define it as 'media'
-                    .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                    .build()
-            )
-        }
-    }
-
     private fun startForegroundService() {
-        val contentIntent = packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
-            PendingIntent.getActivity(
-                this,
-                0,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        }
-        // Create the notification builder
-        notificationBuilder =
-            NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Ongoing Practice Session...")
-            .setContentText(getTimerNotificationText())
-            .setContentIntent(contentIntent)
-            .setSmallIcon(R.drawable.timelapse)
-            .setPriority(NotificationCompat.PRIORITY_LOW) // Use low priority for background tasks
-            .setOngoing(true) // Make the notification persistent
-
-        // Start the service in the foreground with the initial notification
         startForeground(
             NOTIFICATION_ID,
-            notificationBuilder.build(),
+            buildNotification().build(),
             FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
         )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.getStringExtra("action")
-        when (action) {
-            "startTimer" -> startTimer()
-            "pauseTimer" -> pauseTimer()
+        when (intent?.action ?: intent?.getStringExtra("action")) {
+            ACTION_START, "startTimer" -> startTimer()
+            ACTION_PAUSE, "pauseTimer" -> pauseTimer()
+            ACTION_RESET -> resetTimer()
         }
 
         return START_STICKY
     }
 
-    private fun startTimer() {
-        if(timerState == TimerState.RUNNING)
-            return
+    private fun getTimerNotificationText() : String {
+        return "Duration: ${secondsToNiceString(elapsedTimeSec)}"
+    }
 
-        // start the media session - otherwise the timer will be interrupted when the phone sleeps
-        if(!mediaSession.isActive) {
-            mediaSession.isActive = true
+    // Notification channel for timer notification
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Practice Session Notifications", // Channel Name
+            NotificationManager.IMPORTANCE_LOW // Importance level
+        ).apply {
+            description = "Practice Session Notification channel"
         }
 
-        // must be set before Foreground Service is started.
-        // Only playing state at service start will prevent OS of pausing timer to save resources
-        mediaSession.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING,elapsedTimeSec, 1.0f)
-                .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                .build()
+        // Register the channel with the system
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    private fun getIntentForAction( actionToSet: String) : Intent {
+        val intent = Intent(this,
+            PracticeTimerService::class.java).apply { action = actionToSet }
+        return intent
+    }
+
+    private fun getPendingIntent(requestCode: Int, intent: Intent) : PendingIntent {
+        return PendingIntent.getService(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    private fun buildNotification(): NotificationCompat.Builder {
+        val contentIntent =
+            packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+        }
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Ongoing Practice Session")
+            .setContentText(
+                getTimerNotificationText() +
+                        if (timerState == TimerState.PAUSED) " - Session Paused" else ""
+            )
+            .setContentIntent(contentIntent)
+            .setSmallIcon(R.drawable.timelapse)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(timerState == TimerState.RUNNING)
+            .setOnlyAlertOnce(true)
+
+        // Lock screen & tray action buttons
+        if (timerState == TimerState.RUNNING)
+        {
+            val pauseIntent = getIntentForAction(ACTION_PAUSE)
+            val pausePendingIntent = getPendingIntent(1, pauseIntent)
+            builder.addAction(R.drawable.timelapse, "Pause", pausePendingIntent)
+        }
+        else if (timerState == TimerState.PAUSED)
+        {
+            val resumeIntent = getIntentForAction(ACTION_START)
+            val resumePendingIntent = getPendingIntent(2, resumeIntent)
+            builder.addAction(R.drawable.timelapse, "Resume", resumePendingIntent)
+        }
+
+        return builder
+    }
+
+    private fun updateNotification() {
+        if (timerState == TimerState.STOPPED) return
+
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, buildNotification().build())
+    }
+
+    private fun startTimer() {
+        if (timerState == TimerState.RUNNING) return
 
         if (sessionStartTimeMillis == 0L) {
             sessionStartTimeMillis = SystemClock.elapsedRealtime()
@@ -178,7 +222,7 @@ class PracticeTimerService : Service() {
             nextTickTimeMillis = sessionStartTimeMillis + 1000L
         }
 
-        if(timerState == TimerState.PAUSED) {
+        if (timerState == TimerState.PAUSED) {
             val pauseDuration = SystemClock.elapsedRealtime() - timePausedAtMillis
             totalPausedDurationMillis += pauseDuration
             nextTickTimeMillis += pauseDuration
@@ -190,66 +234,26 @@ class PracticeTimerService : Service() {
 
         handler.postDelayed(timerRunnable, TIMER_TICK)
         timerState = TimerState.RUNNING
+        updateNotification()
     }
 
     private fun stopTimer() {
-        if(timerState in setOf(TimerState.RUNNING, TimerState.PAUSED)) {
+        if (timerState in setOf(TimerState.RUNNING, TimerState.PAUSED)) {
+            handler.removeCallbacks(timerRunnable)
             timerState = TimerState.STOPPED
+
             stopForeground(STOP_FOREGROUND_REMOVE)
         }
-    }
-
-    private fun getTimerNotificationText() : String {
-        return "Duration: ${secondsToNiceString(elapsedTimeSec)}"
-    }
-
-    // Notification channel for timer notification
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Practice Timer Notifications", // Channel Name
-            NotificationManager.IMPORTANCE_LOW // Importance level
-        ).apply {
-            description = "Practice App Timer Notification channel"
-        }
-
-        // Register the channel with the system
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.createNotificationChannel(channel)
-    }
-
-    private fun updateNotification() {
-        if (!::notificationBuilder.isInitialized) {
-            return
-        }
-
-        // Update the notification's content
-        notificationBuilder.setContentText(
-            getTimerNotificationText() +
-                    if(timerState == TimerState.PAUSED) " - Session Paused" else ""
-        )
-
-        // Notify the system to update the existing notification
-        val notificationManager =
-            getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, notificationBuilder.build())
     }
 
     // For interaction with timer service from viewModels
 
     fun pauseTimer() {
-        if(timerState == TimerState.RUNNING)
+        if (timerState == TimerState.RUNNING)
         {
             timerState = TimerState.PAUSED
+            handler.removeCallbacks(timerRunnable)
             timePausedAtMillis = SystemClock.elapsedRealtime()
-
-            mediaSession.setPlaybackState(
-                PlaybackStateCompat.Builder()
-                    .setState(PlaybackStateCompat.STATE_PAUSED,0, 0.0f)
-                    .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                    .build()
-            )
-
             updateNotification()
         }
     }
@@ -264,13 +268,6 @@ class PracticeTimerService : Service() {
         }
 
         stopTimer()
-
-        mediaSession.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_STOPPED,0, 0.0f)
-                .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                .build()
-        )
 
         elapsedTimeSec = 0L
         sessionStartTimeMillis = 0L

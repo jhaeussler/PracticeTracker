@@ -80,9 +80,9 @@ class OverviewViewModel (
         bindToTimerService()
     }
 
-    private fun bindToTimerService() {
-        if (isServiceBound)
-            return
+    private fun bindToTimerService()
+    {
+        if (isServiceBound) return
 
         val serviceStartIntent = Intent(getApplication(), PracticeTimerService::class.java)
         getApplication<Application>().startService(serviceStartIntent)
@@ -96,8 +96,8 @@ class OverviewViewModel (
     }
 
     override fun onCleared() {
-        super.onCleared()
         if (isServiceBound) {
+            timerService?.setTimerCallback(null)
             getApplication<Application>().unbindService(serviceConnection)
             isServiceBound = false
         }
@@ -149,18 +149,23 @@ class OverviewViewModel (
 
         if(ContextCompat.checkSelfPermission(
                 getApplication(), Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
+            ) != PackageManager.PERMISSION_GRANTED
         ) {
-            toggleTimer()
-        } else {
             requestPermission(Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        toggleTimer()
     }
 
     fun toggleTimer() {
         timerService?.let {
-            if(it.isRunning()) { it.pauseTimer() }
-            else { it.startOrResumeTimer() }
+            if (it.isRunning()) {
+                it.pauseTimer()
+            }
+            else {
+                it.startOrResumeTimer()
+            }
+
             updateTimerState()
         }
     }
