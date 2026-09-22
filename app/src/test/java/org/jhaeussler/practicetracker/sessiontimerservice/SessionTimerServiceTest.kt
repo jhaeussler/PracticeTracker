@@ -107,22 +107,17 @@ class SessionTimerServiceTest {
         advanceTimeBySeconds(3)
         assertEquals(3L, SessionTimerService.elapsedTimeSec.value)
 
-        // Pause the timer
         sendAction(SessionTimerService.ACTION_PAUSE)
         assertEquals(SessionTimerService.TimerState.PAUSED, SessionTimerService.timerState.value)
 
-        // Advance time while paused — elapsed time must remain frozen at 3s
         advanceTimeBySeconds(10)
         assertEquals(3L, SessionTimerService.elapsedTimeSec.value)
 
-        // Resume execution
         sendAction(SessionTimerService.ACTION_START)
         assertEquals(SessionTimerService.TimerState.RUNNING, SessionTimerService.timerState.value)
 
-        // Verify time picks up at 3 seconds immediately
         assertEquals(3L, SessionTimerService.elapsedTimeSec.value)
 
-        // Advance another 3 active seconds
         advanceTimeBySeconds(4)
         assertEquals(7L, SessionTimerService.elapsedTimeSec.value)
     }

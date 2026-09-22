@@ -29,7 +29,6 @@ class SessionTimerService : Service() {
     enum class TimerState { STOPPED, RUNNING, PAUSED }
 
     private var sessionStartTimeMillis = 0L
-    private var nextTickTimeMillis = 0L
     private var timePausedAtMillis = 0L             // Absolute time when the timer was PAUSED
     private var totalPausedDurationMillis = 0L      // Total time spent paused (Cumulative offset)
 
@@ -74,29 +73,20 @@ class SessionTimerService : Service() {
     }
 
     private val timerRunnable = object : Runnable {
-        override fun run() {
-            if (_timerState.value != TimerState.RUNNING) {
-                return
-            }
+        override fun run()
+        {
+            if (_timerState.value != TimerState.RUNNING) return
 
             val currentTime = SystemClock.elapsedRealtime()
-            _elapsedTimeSec.value =
-                (currentTime - sessionStartTimeMillis - totalPausedDurationMillis) / 1000
-
-            nextTickTimeMillis += TIMER_TICK
-
-            // difference between last scheduled time (last call here + 1 s)
-            // and now (slightly more than 1 s later) -> adapt to delay
-            val delayMillis = nextTickTimeMillis - SystemClock.elapsedRealtime()
+            val totalElapsedMillis = currentTime - sessionStartTimeMillis - totalPausedDurationMillis
+            _elapsedTimeSec.value = totalElapsedMillis / TIMER_TICK
 
             updateNotification()
 
-            if (delayMillis <= 0) {
-                // Last tick already over 1 s ago...
-                handler.post(this)
-            } else {
-                handler.postDelayed(this, delayMillis)
-            }
+            val timeToNextSecond = TIMER_TICK - (totalElapsedMillis % TIMER_TICK)
+
+            // Schedule next tick precisely when the next second flips
+            handler.postDelayed(this, timeToNextSecond)
         }
     }
 
@@ -130,10 +120,6 @@ class SessionTimerService : Service() {
         return START_STICKY
     }
 
-    private fun getTimerNotificationText() : String {
-        return "Duration: ${secondsToNiceString(_elapsedTimeSec.value)}"
-    }
-
     // Notification channel for timer notification
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
@@ -150,9 +136,8 @@ class SessionTimerService : Service() {
     }
 
     private fun getIntentForAction( actionToSet: String) : Intent {
-        val intent = Intent(this,
+        return Intent(this,
             SessionTimerService::class.java).apply { action = actionToSet }
-        return intent
     }
 
     private fun getPendingIntent(requestCode: Int, intent: Intent) : PendingIntent {
@@ -175,18 +160,25 @@ class SessionTimerService : Service() {
                 )
         }
 
+        fun getTimerNotificationText() : String {
+            return "Duration: ${secondsToNiceString(_elapsedTimeSec.value)}"
+        }
+
         val currentState = _timerState.value
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Ongoing Practice Session")
             .setContentText(
-                getTimerNotificationText() +
-                        if (currentState == TimerState.PAUSED) " - Session Paused" else ""
+                if (currentState == TimerState.PAUSED)
+                    "${getTimerNotificationText()} - Session Paused"
+                else
+                    getTimerNotificationText()
             )
             .setContentIntent(contentIntent)
             .setSmallIcon(R.drawable.timelapse)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(currentState == TimerState.RUNNING)
             .setOnlyAlertOnce(true)
+            .setUsesChronometer(false)
 
         // Lock screen & tray action buttons
         if (currentState == TimerState.RUNNING)
@@ -221,26 +213,24 @@ class SessionTimerService : Service() {
         {
             sessionStartTimeMillis = SystemClock.elapsedRealtime()
             _sessionStartDate.value = LocalDate.now()
-            nextTickTimeMillis = sessionStartTimeMillis + TIMER_TICK
         }
 
         if (_timerState.value == TimerState.PAUSED)
         {
             val pauseDuration = SystemClock.elapsedRealtime() - timePausedAtMillis
             totalPausedDurationMillis += pauseDuration
-            nextTickTimeMillis += pauseDuration
         }
 
-        if (_timerState.value == TimerState.STOPPED) {
-            startForegroundService()
-        }
-
-        // Ensure no stale callbacks exist before scheduling a new tick loop
-        handler.removeCallbacks(timerRunnable)
-        handler.post(timerRunnable)
+        val isFirstStart = _timerState.value == TimerState.STOPPED
         _timerState.value = TimerState.RUNNING
 
-        updateNotification()
+        if (isFirstStart) {
+            startForegroundService()
+        } else {
+            updateNotification()
+        }
+        handler.removeCallbacks(timerRunnable)
+        handler.post(timerRunnable)
     }
 
     private fun handlePauseTimer() {
@@ -262,7 +252,6 @@ class SessionTimerService : Service() {
         sessionStartTimeMillis = 0L
         timePausedAtMillis = 0L
         totalPausedDurationMillis = 0L
-        nextTickTimeMillis = 0L
         _sessionStartDate.value = null
 
         stopSelf()

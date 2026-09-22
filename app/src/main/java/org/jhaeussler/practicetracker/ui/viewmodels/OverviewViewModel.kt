@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewModels
+package org.jhaeussler.practicetracker.ui.viewmodels
 
 import android.Manifest
 import android.app.Application
@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 class OverviewViewModel (
@@ -95,20 +96,23 @@ class OverviewViewModel (
         _showConfirmSessionEndDiag.value = true
     }
 
-    suspend fun endSession()
+    fun endSession()
     {
-        val sessionTime = HoursAndMins.fromSeconds(elapsedTimeSec.value)
-        val practiceDate: LocalDate = sessionStartDate.value ?: LocalDate.now()
+        viewModelScope.launch {
+            val sessionTime = HoursAndMins.fromSeconds(elapsedTimeSec.value)
+            val practiceDate: LocalDate = sessionStartDate.value ?: LocalDate.now()
 
-        practiceTimeRepository.accumulatePracticeTime(
-            PracticeTime(
-                0,
-                sessionTime.roundedToNextHalf(),
-                practiceDate
+            practiceTimeRepository.accumulatePracticeTime(
+                PracticeTime(
+                    0,
+                    sessionTime.roundedToNextHalf(),
+                    practiceDate
+                )
             )
-        )
 
-        SessionTimerService.resetTimer(getApplication())
+            SessionTimerService.resetTimer(getApplication())
+            resetDialogFlags()
+        }
     }
 
     fun resetTimer() {

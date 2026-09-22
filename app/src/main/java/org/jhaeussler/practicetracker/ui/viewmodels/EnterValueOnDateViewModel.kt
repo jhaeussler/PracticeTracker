@@ -3,17 +3,12 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewModels
+package org.jhaeussler.practicetracker.ui.viewmodels
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
 import java.time.DateTimeException
 import java.time.LocalDate
 
@@ -40,9 +35,9 @@ class EnterValueOnDateViewModel(
                 dateInputs[1].toInt(),
                 dateInputs[0].toInt()
             )
-        } catch (ex : NumberFormatException) {
+        } catch (_ : NumberFormatException) {
             Log.e("InputError", "Invalid input for number conversion: $dateInput")
-        } catch (ex : DateTimeException) {
+        } catch (_ : DateTimeException) {
             Log.e("InputError", "Not a valid Date: $dateInput")
         }
 
