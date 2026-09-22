@@ -5,10 +5,11 @@
 
 package org.jhaeussler.practicetracker.sessiontimerservice
 
+import android.app.Notification
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
-import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,11 +20,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
+import org.robolectric.shadows.ShadowNotificationManager
+import org.robolectric.shadows.ShadowService
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
+
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -45,13 +50,11 @@ class SessionTimerServiceTest {
     }
 
     /**
-     * Advances both SystemClock.elapsedRealtime() and the Handler's Looper
-     * synchronously to simulate real time passing in unit tests.
+     * Advances the Robolectric main looper time synchronously,
+     * which automatically updates SystemClock.elapsedRealtime() and triggers delayed Runnables.
      */
     private fun advanceTimeBySeconds(seconds: Long) {
-        val millis = TimeUnit.SECONDS.toMillis(seconds)
-        SystemClock.setCurrentTimeMillis(SystemClock.uptimeMillis() + millis)
-        ShadowLooper.idleMainLooper(millis, TimeUnit.MILLISECONDS)
+        ShadowLooper.idleMainLooper(TimeUnit.SECONDS.toMillis(seconds), TimeUnit.MILLISECONDS)
     }
 
     @Test
@@ -187,5 +190,165 @@ class SessionTimerServiceTest {
 
         service.onStartCommand(intent, 0, 2)
         assertTrue(service.isPaused())
+    }
+
+    @Test
+    fun onStartCommand_withStringExtraAction_handlesStartAndPause() {
+        val startIntent = Intent(ApplicationProvider.getApplicationContext(), SessionTimerService::class.java).apply {
+            putExtra("action", "startTimer")
+        }
+        service.onStartCommand(startIntent, 0, 1)
+        assertTrue(service.isRunning())
+
+        val pauseIntent = Intent(ApplicationProvider.getApplicationContext(), SessionTimerService::class.java).apply {
+            putExtra("action", "pauseTimer")
+        }
+        service.onStartCommand(pauseIntent, 0, 2)
+        assertTrue(service.isPaused())
+    }
+
+    @Test
+    fun notification_reflectsRunningAndPausedStates() {
+        val shadowService: ShadowService = shadowOf(service)
+        service.startOrResumeTimer()
+
+        val foregroundNotification = shadowService.lastForegroundNotification
+        val foregroundId = shadowService.lastForegroundNotificationId
+
+        assertEquals(42, foregroundId)
+        assertTrue(foregroundNotification.extras.getCharSequence(
+            Notification.EXTRA_TEXT).toString().contains("Duration: 00 sec."))
+
+        val notificationManager = ApplicationProvider.getApplicationContext<Context>()
+            .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val shadowNM: ShadowNotificationManager = shadowOf(notificationManager)
+
+        advanceTimeBySeconds(65)
+        val updatedNotification = shadowNM.getNotification(42)
+        assertTrue(updatedNotification.extras.getCharSequence(
+            Notification.EXTRA_TEXT).toString().contains("1:05 min."))
+
+        service.pauseTimer()
+        val pausedNotification = shadowNM.getNotification(42)
+        val pausedText = pausedNotification.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        assertTrue(pausedText.contains("Session Paused"))
+    }
+
+    @Test
+    fun startOrResumeTimer_calledMultipleTimes_doesNotAccelerateTicks() {
+        var tickCount = 0
+        service.setTimerCallback(object : SessionTimerService.TimerCallback {
+            override fun onTimerTick(elapsedTime: Long) {
+                tickCount++
+            }
+        })
+
+        service.startOrResumeTimer()
+        service.startOrResumeTimer()
+
+        advanceTimeBySeconds(1)
+
+        // Should only have ticked once, not twice
+        assertEquals(1, tickCount)
+    }
+
+    @Test
+    fun pauseTimer_calledMultipleTimes_doesNotCorruptState() {
+        var lastEmittedTime = 0L
+        service.setTimerCallback(object : SessionTimerService.TimerCallback {
+            override fun onTimerTick(elapsedTime: Long) {
+                lastEmittedTime = elapsedTime
+            }
+        })
+
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(2)
+        assertEquals(2L, lastEmittedTime)
+
+        service.pauseTimer()
+        advanceTimeBySeconds(5)
+
+        // 3. Call pause again (should be ignored and NOT overwrite timePausedAtMillis)
+        service.pauseTimer()
+        advanceTimeBySeconds(5)
+
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(1)
+
+        // 5. Verify the 10 total seconds spent paused were ignored
+        assertEquals(3L, lastEmittedTime)
+    }
+
+    @Test
+    fun resetTimer_emitsZeroAndStopsCallback() {
+        var lastEmittedTime = -1L
+        service.setTimerCallback(object : SessionTimerService.TimerCallback {
+            override fun onTimerTick(elapsedTime: Long) {
+                lastEmittedTime = elapsedTime
+            }
+        })
+
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(10)
+        assertEquals(10L, lastEmittedTime)
+
+        service.resetTimer()
+        assertEquals(0L, lastEmittedTime)
+
+        // Advance time again after reset to make sure handler loop completely stopped
+        advanceTimeBySeconds(5)
+        assertEquals(0L, lastEmittedTime)
+    }
+
+    @Test
+    fun multiplePauseResumeCycles_accumulatePauseOffsetCorrectly() {
+        var lastEmittedTime = 0L
+        service.setTimerCallback(object : SessionTimerService.TimerCallback {
+            override fun onTimerTick(elapsedTime: Long) {
+                lastEmittedTime = elapsedTime
+            }
+        })
+
+        // Start -> run 2s (Total run: 2s)
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(2)
+
+        // Pause 5s
+        service.pauseTimer()
+        advanceTimeBySeconds(5)
+
+        // Resume -> run 3s (Total run: 5s)
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(3)
+        assertEquals(5L, lastEmittedTime)
+
+        // Pause 10s
+        service.pauseTimer()
+        advanceTimeBySeconds(10)
+
+        // Resume -> run 4s (Total run: 9s)
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(4)
+        assertEquals(9L, lastEmittedTime)
+    }
+
+    @Test
+    fun startAfterReset_startsFreshFromZero() {
+        var lastEmittedTime = -1L
+        service.setTimerCallback(object : SessionTimerService.TimerCallback {
+            override fun onTimerTick(elapsedTime: Long) {
+                lastEmittedTime = elapsedTime
+            }
+        })
+
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(15)
+
+        service.resetTimer()
+
+        service.startOrResumeTimer()
+        advanceTimeBySeconds(2)
+
+        assertEquals(2L, lastEmittedTime)
     }
 }
