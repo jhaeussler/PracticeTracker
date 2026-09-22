@@ -105,6 +105,9 @@ class SessionTimerService : Service() {
             mediaSession = null
         }
 
+        mediaSession = null
+        player = null
+
         super.onDestroy()
     }
 
