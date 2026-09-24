@@ -29,9 +29,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,6 +42,7 @@ import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButtonRawString
+import org.jhaeussler.practicetracker.ui.components.RoundButtonWithIcon
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
 
@@ -50,6 +54,8 @@ fun MetronomeScreen(
 
     val isRunning by metronomeViewModel.isMetronomeRunning.collectAsStateWithLifecycle()
     val bpm by metronomeViewModel.bpm.collectAsStateWithLifecycle()
+    val currentBeatInMeasure by metronomeViewModel.currentBeatInMeasure.collectAsStateWithLifecycle()
+    val subdivisions by metronomeViewModel.subdivisions.collectAsStateWithLifecycle()
 
     ScreenContainer(
         title = R.string.metronome_screen_title
@@ -58,6 +64,45 @@ fun MetronomeScreen(
             bpm,
             { metronomeViewModel.decrementBpm() },
             { metronomeViewModel.incrementBpm() },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        HorizontalDivider(
+            thickness = 2.dp,
+            color = Color.DarkGray,
+            modifier = Modifier.fillMaxWidth(0.7f)
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        SubdivisionSection(
+            currentBeatInMeasure = currentBeatInMeasure,
+            subdivisions = subdivisions
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        HorizontalDivider(
+            thickness = 2.dp,
+            color = Color.DarkGray,
+            modifier = Modifier.fillMaxWidth(0.7f)
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        PracticeAppButton(
+            onClick  = {
+                if (!isRunning) {
+                    metronomeViewModel.startMetronomeService(context)
+                }
+                else {
+                    metronomeViewModel.stopMetronomeService(context)
+                }
+            },
+            text = if (!isRunning) R.string.start else R.string.stop,
+            fontSize = 27,
+            modifier = Modifier.fillMaxWidth(0.7f).height(70.dp)
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -88,31 +133,54 @@ fun MetronomeScreen(
                 Pair(160, setBpmWrapper),
             )
         )
+    }
+}
 
-        Spacer(modifier = Modifier.height(20.dp))
+@Composable
+fun SubdivisionButtonRow(
+    buttonsInRow: Int,
+    firstIndex: Int = 0,
+    currentBeatInMeasure: Int
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(
+            20.dp, alignment = Alignment.CenterHorizontally
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (i in 0 until buttonsInRow)
+        {
+            val realIndex = firstIndex + i
 
-        HorizontalDivider(
-            thickness = 2.dp,
-            color = Color.DarkGray,
-            modifier = Modifier.fillMaxWidth(0.7f)
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        PracticeAppButton(
-            onClick  = {
-                if (!isRunning) {
-                    metronomeViewModel.startMetronomeService(context)
+            RoundButtonWithIcon(
+                {},
+                "${realIndex + 1}",
+                text = "${realIndex + 1}",
+                colors = if (currentBeatInMeasure == realIndex) {
+                    IconButtonDefaults.filledIconButtonColors()
                 }
                 else {
-                    metronomeViewModel.stopMetronomeService(context)
+                    IconButtonColors(
+                        contentColor = Color.White,
+                        containerColor = Color.DarkGray,
+                        disabledContentColor = Color.DarkGray,
+                        disabledContainerColor = Color.LightGray
+                    )
                 }
-            },
-            text = if (!isRunning) R.string.start else R.string.stop,
-            fontSize = 27,
-            modifier = Modifier.fillMaxWidth(0.7f).height(70.dp)
-        )
+            )
+        }
     }
+}
+
+@Composable
+fun SubdivisionSection(
+    currentBeatInMeasure: Int,
+    subdivisions: Int
+) {
+    SubdivisionButtonRow(
+        4,
+        currentBeatInMeasure = currentBeatInMeasure
+    )
 }
 
 @Composable
@@ -127,16 +195,11 @@ fun BpmDisplayRow(
         ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FilledIconButton(
-            onClick = decrementBpm,
-            shape = CircleShape,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Remove,
-                contentDescription = "Decrease BPM"
-            )
-        }
+        RoundButtonWithIcon(
+            decrementBpm,
+            "Decrease BPM",
+            iconImage = Icons.Default.Remove
+        )
 
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -157,16 +220,11 @@ fun BpmDisplayRow(
             }
         }
 
-        FilledIconButton(
-            onClick = incrementBpm,
-            shape = CircleShape,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Increase BPM"
-            )
-        }
+        RoundButtonWithIcon(
+            incrementBpm,
+            "Increase BPM",
+            iconImage = Icons.Default.Add
+        )
     }
 }
 

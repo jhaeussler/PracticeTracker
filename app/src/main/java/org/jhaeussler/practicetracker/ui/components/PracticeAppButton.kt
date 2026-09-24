@@ -7,10 +7,18 @@ package org.jhaeussler.practicetracker.ui.components
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,5 +59,35 @@ fun PracticeAppButtonRawString(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+fun RoundButtonWithIcon(
+    onClick: () -> Unit,
+    description: String,
+    enabled: Boolean = true,
+    iconImage: ImageVector? = null,
+    text: String? = null,
+    colors: IconButtonColors = IconButtonDefaults.filledIconButtonColors()
+) {
+    FilledIconButton(
+        onClick = onClick,
+        shape = CircleShape,
+        enabled = enabled,
+        colors = colors,
+        modifier = Modifier.size(56.dp)
+    ) {
+        if (iconImage != null) {
+            Icon(
+                imageVector = iconImage,
+                contentDescription = description
+            )
+        }
+        else if (text != null) {
+            Text(
+                text = text
+            )
+        }
     }
 }

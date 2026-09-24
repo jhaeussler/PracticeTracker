@@ -55,7 +55,7 @@ class MetronomeEngine(
     var currentBeatInMeasure = 0
 
     fun setSubdivision(value : Int) : Boolean {
-        if (value in 1..16)
+        if (value in 1..8)
         {
             beatsPerMeasure = value
             return true

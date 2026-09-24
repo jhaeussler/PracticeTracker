@@ -25,6 +25,25 @@ class MetronomeViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = false
         )
+    val bpm: StateFlow<Int> = MetronomeService.bpm
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 120
+        )
+    val subdivisions : StateFlow<Int> = MetronomeService.subdivisions
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 4
+        )
+    val currentBeatInMeasure : StateFlow<Int> = MetronomeService.currentBeatInMeasure
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
     fun startMetronomeService(context: Context) {
         val intent = Intent(context, MetronomeService::class.java)
         ContextCompat.startForegroundService(context, intent)
@@ -33,12 +52,6 @@ class MetronomeViewModel(
         val intent = Intent(context, MetronomeService::class.java)
         context.stopService(intent)
     }
-    val bpm: StateFlow<Int> = MetronomeService.bpm
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = 120
-        )
 
     fun incrementBpm() {
         MetronomeService.setBpm(bpm.value + 1)
@@ -50,5 +63,9 @@ class MetronomeViewModel(
 
     fun setBpm(value: Int) {
         MetronomeService.setBpm(value)
+    }
+
+    fun setSubdivisions(value: Int) {
+        MetronomeService.setSubdivisions(value)
     }
 }

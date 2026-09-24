@@ -260,13 +260,13 @@ class MetronomeEngineTest {
         assertTrue(engine.setSubdivision(3))
         assertEquals(3, engine.beatsPerMeasure)
 
-        assertTrue(engine.setSubdivision(16))
-        assertEquals(16, engine.beatsPerMeasure)
+        assertTrue(engine.setSubdivision(8))
+        assertEquals(8, engine.beatsPerMeasure)
 
         // Invalid values should be rejected and retain previous state
         assertFalse(engine.setSubdivision(0))
-        assertFalse(engine.setSubdivision(17))
-        assertEquals(16, engine.beatsPerMeasure)
+        assertFalse(engine.setSubdivision(9))
+        assertEquals(8, engine.beatsPerMeasure)
     }
 
     @Test
