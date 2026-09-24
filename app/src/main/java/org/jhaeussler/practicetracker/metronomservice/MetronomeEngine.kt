@@ -70,6 +70,7 @@ class MetronomeEngine(
         startTimeNanos = System.nanoTime()
         beatsDelivered = 0
         currentBeatInMeasure = 0
+        currentClickSamples = accentClickSamples
     }
 
     private var currentClickSamples: ShortArray = accentClickSamples

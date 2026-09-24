@@ -174,15 +174,20 @@ class MetronomeEngineTest {
 
     @Test
     fun `resetPhase sets sample counters to zero`() {
-        val buffer = ShortArray(1024)
+        val buffer = ShortArray(22051)
         engine.fillNextChunk(buffer, bpm = 120)
 
         assertTrue(engine.totalSamplesGenerated > 0)
+        assertTrue(engine.sampleIndexInBeat > 0)
+        assertTrue(engine.currentBeatInMeasure > 0)
 
         engine.resetPhase()
 
         assertEquals(0L, engine.totalSamplesGenerated)
         assertEquals(0.0, engine.sampleIndexInBeat, 0.0)
+
+        engine.fillNextChunk(buffer, bpm = 120)
+        assertEquals(buffer[1], engine.accentClickSamples[1])
     }
 
     @Test
