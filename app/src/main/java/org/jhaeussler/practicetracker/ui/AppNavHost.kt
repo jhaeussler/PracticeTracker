@@ -26,7 +26,7 @@ import org.jhaeussler.practicetracker.ui.screens.EntryListScreen
 import org.jhaeussler.practicetracker.ui.screens.MetronomeScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.ExtraInfoScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.WeeklyDataScreen
-import org.jhaeussler.practicetracker.ui.viewmodels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
 
 enum class AppDestination(val title: Int) {
     OverviewScreen(title = R.string.overview_destination),

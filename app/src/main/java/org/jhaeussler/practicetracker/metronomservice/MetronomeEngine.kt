@@ -11,11 +11,19 @@ import kotlin.math.sin
 class MetronomeEngine(
     val sampleRate: Int = 44100,
     val clickDurationMs: Int = 10,
-    val toneFrequencyHz: Double = 1000.0,
+    val regularToneHz: Double = 1000.0,
+    val accentToneHz: Double = 1500.0,
     var enableWallClockSync: Boolean = true
 ) {
-    // Pre-generate a short 1000 Hz sine wave click (10ms duration)
-    val clickSamples: ShortArray by lazy {
+    // lazy means load only once and cache in memory
+    val regularClickSamples: ShortArray by lazy {
+        generateSineClickBuffer(regularToneHz)
+    }
+    val accentClickSamples: ShortArray by lazy {
+        generateSineClickBuffer(accentToneHz)
+    }
+
+    private fun generateSineClickBuffer(frequency: Double): ShortArray {
         val numSamples = ((sampleRate / 1000.0) * clickDurationMs).toInt()
         val samples = ShortArray(numSamples)
 
@@ -23,13 +31,13 @@ class MetronomeEngine(
             // sin (2 * pi * x) -> sinus with amplitude 1 und period 1
             // sin (2 * pi * x / sr) -> will give us period of 44100 (samples)
             // -> multiply with Hz we actually want to compress the sin curve
-            val angle = 2.0 * Math.PI * i * toneFrequencyHz / sampleRate
+            val angle = 2.0 * Math.PI * i * frequency / sampleRate
             // Scale to 16-bit short max value (~32767) with a slight fade out
             val envelope = 1.0 - (i.toDouble() / numSamples)
             samples[i] = (sin(angle) * Short.MAX_VALUE * envelope).toInt().toShort()
         }
 
-        samples
+        return samples
     }
 
     var sampleIndexInBeat = 0.0
@@ -40,12 +48,31 @@ class MetronomeEngine(
     private var startTimeNanos: Long = 0
     private var beatsDelivered: Long = 0
 
+    // sub-division tracking
+    var beatsPerMeasure = 4
+        private set
+    @Volatile
+    var currentBeatInMeasure = 0
+
+    fun setSubdivision(value : Int) : Boolean {
+        if (value in 1..16)
+        {
+            beatsPerMeasure = value
+            return true
+        }
+
+        return false
+    }
+
     fun resetPhase() {
         sampleIndexInBeat = 0.0
         totalSamplesGenerated = 0
         startTimeNanos = System.nanoTime()
         beatsDelivered = 0
+        currentBeatInMeasure = 0
     }
+
+    private var currentClickSamples: ShortArray = accentClickSamples
 
     fun fillNextChunk(buffer: ShortArray, bpm: Int) {
         // 1. Calculate how many silent samples belong between ticks for current BPM
@@ -55,8 +82,8 @@ class MetronomeEngine(
         {
             val currentSampleIndexAsInt = sampleIndexInBeat.toInt()
 
-            if (currentSampleIndexAsInt in clickSamples.indices) {
-                buffer[i] = clickSamples[currentSampleIndexAsInt]
+            if (currentSampleIndexAsInt in currentClickSamples.indices) {
+                buffer[i] = currentClickSamples[currentSampleIndexAsInt]
             } else {
                 buffer[i] = 0
             }
@@ -66,8 +93,17 @@ class MetronomeEngine(
 
             // samplesPerBeat = sr * 60 / BPM
             // BPM = 133: samplesPerBeat = 44100 * 60 / 133 = 19894.7368
-            if (sampleIndexInBeat >= samplesPerBeat) {
+            if (sampleIndexInBeat >= samplesPerBeat)
+            {
                 beatsDelivered++
+
+                currentBeatInMeasure = (currentBeatInMeasure + 1) % beatsPerMeasure
+
+                currentClickSamples = if (currentBeatInMeasure == 0) {
+                    accentClickSamples
+                } else {
+                    regularClickSamples
+                }
 
                 // only apply phase correction mechanism if the corresponding flag is set
                 val phaseCorrection = if (enableWallClockSync) {
@@ -76,7 +112,7 @@ class MetronomeEngine(
                     val targetBeats = (elapsedNanos / 1_000_000_000.0) * (bpm / 60.0)
                     val driftInBeats = beatsDelivered - targetBeats
 
-                    driftInBeats * 0.01 // Gentle 1% nudge during silence
+                    driftInBeats * 0.01 // Gentle 1% nudge
                 }
                 else {
                     0.0

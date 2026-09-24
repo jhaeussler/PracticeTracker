@@ -13,7 +13,7 @@ import org.junit.Rule
 import org.junit.Test
 
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
-import org.jhaeussler.practicetracker.ui.viewmodels.EnterValueOnDateViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.EnterValueOnDateViewModel
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll

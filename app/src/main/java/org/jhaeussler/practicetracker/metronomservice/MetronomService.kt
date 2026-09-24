@@ -17,6 +17,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Binder
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,19 @@ class MetronomeService : Service() {
             // Keep BPM within reasonable physical musical bounds
             _bpm.value = newBpm.coerceIn(30, 300)
         }
+
+        private val _subdivisions = MutableStateFlow(4)
+        val subdivisions: StateFlow<Int> = _subdivisions.asStateFlow()
+
+        fun setSubdivisions(value: Int) {
+            if (engine.setSubdivision(value))
+                _subdivisions.value = value
+        }
+        private val _currentBeatInMeasure = MutableStateFlow(0)
+        val currentBeatInMeasure: StateFlow<Int> = _currentBeatInMeasure.asStateFlow()
+
+        private var audioThread: Thread? = null
+        private val engine = MetronomeEngine(SAMPLE_RATE)
 
         // purely private members
         private const val ACTION_STOP = "org.jhaeussler.practicetracker.ACTION_STOP"
@@ -161,10 +175,6 @@ class MetronomeService : Service() {
         audioThread?.join()
         audioThread = null
     }
-
-    private var audioThread: Thread? = null
-    private val engine = MetronomeEngine(SAMPLE_RATE)
-
     private fun runAudioLoop()
     {
         val minBufferSize = AudioTrack.getMinBufferSize(
@@ -196,13 +206,21 @@ class MetronomeService : Service() {
 
         audioTrack.play()
         engine.resetPhase()
+        _currentBeatInMeasure.value = engine.currentBeatInMeasure
+        _subdivisions.value = engine.beatsPerMeasure
 
         // Fixed chunk size for writing to the hardware buffer
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
-        while (isRunning.value) {
+        while (isRunning.value)
+        {
             engine.fillNextChunk(buffer, bpm.value)
+
+            if (_currentBeatInMeasure.value != engine.currentBeatInMeasure) {
+                _currentBeatInMeasure.value = engine.currentBeatInMeasure
+            }
+
             audioTrack.write(buffer, 0, chunkSize)
         }
 
@@ -210,7 +228,7 @@ class MetronomeService : Service() {
             audioTrack.stop()
             audioTrack.release()
         } catch (e: Exception) {
-            // Handle potential teardown exceptions safely
+            Log.w("MetronomeService", "Exception during audio track release: $e")
         }
     }
 }

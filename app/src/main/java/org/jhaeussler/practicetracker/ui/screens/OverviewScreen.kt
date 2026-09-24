@@ -41,7 +41,7 @@ import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
-import org.jhaeussler.practicetracker.ui.viewmodels.OverviewViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.OverviewViewModel
 import org.jhaeussler.practicetracker.utils.secondsToNiceString
 import kotlinx.coroutines.launch
 import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
