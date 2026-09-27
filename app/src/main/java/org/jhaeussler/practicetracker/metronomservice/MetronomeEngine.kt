@@ -5,23 +5,25 @@
 
 package org.jhaeussler.practicetracker.metronomservice
 
+import org.jhaeussler.practicetracker.metronomservice.MetronomeRepository.MAX_SUBDIVISIONS
+import org.jhaeussler.practicetracker.metronomservice.MetronomeRepository.createInitialBeats
+import kotlin.math.ceil
 import kotlin.math.sin
 
+data class Beat(
+    val index: Int,
+    val isEnabled: Boolean = true,
+    val isAccent: Boolean = false
+)
 
 class MetronomeEngine(
     val sampleRate: Int = 44100,
     val clickDurationMs: Int = 10,
-    val regularToneHz: Double = 1000.0,
-    val accentToneHz: Double = 1500.0,
-    var enableWallClockSync: Boolean = true
+    regularToneHz: Double = 1000.0,
+    accentToneHz: Double = 1500.0
 ) {
-    // lazy means load only once and cache in memory
-    val regularClickSamples: ShortArray by lazy {
-        generateSineClickBuffer(regularToneHz)
-    }
-    val accentClickSamples: ShortArray by lazy {
-        generateSineClickBuffer(accentToneHz)
-    }
+    val regularClickSamples: ShortArray = generateSineClickBuffer(regularToneHz)
+    val accentClickSamples: ShortArray = generateSineClickBuffer(accentToneHz)
 
     private fun generateSineClickBuffer(frequency: Double): ShortArray {
         val numSamples = ((sampleRate / 1000.0) * clickDurationMs).toInt()
@@ -41,89 +43,147 @@ class MetronomeEngine(
     }
 
     var sampleIndexInBeat = 0.0
+        private set
     var totalSamplesGenerated: Long = 0
         private set
-
-    // Tracks target timing relative to system uptime
-    private var startTimeNanos: Long = 0
-    private var beatsDelivered: Long = 0
-
-    // sub-division tracking
-    var beatsPerMeasure = 4
+    var totalBeatsDelivered: Long = 0
+        private set
+    @Volatile
+    var beats: List<Beat> = createInitialBeats(4)
         private set
     @Volatile
     var currentBeatInMeasure = 0
+        private set
 
-    fun setSubdivision(value : Int) : Boolean {
-        if (value in 1..8)
-        {
-            beatsPerMeasure = value
-            return true
-        }
+    fun beatsPerMeasure() : Int = beats.size
 
-        return false
+    fun setBeatsList(newBeats: List<Beat>) {
+        if (newBeats.isEmpty() || newBeats.size > MAX_SUBDIVISIONS) return
+
+        beats = newBeats
+        resetPhase()
+    }
+    fun setSubdivision(value : Int) : Boolean
+    {
+        if (value !in 1..MAX_SUBDIVISIONS) return false
+
+        beats = createInitialBeats(value)
+        resetPhase()
+        return true
     }
 
-    fun resetPhase() {
+    fun toggleBeatEnabled(index: Int) : Boolean
+    {
+        val current = beats
+        if (index !in current.indices) return false
+
+        beats = current.mapIndexed { i, beat ->
+            if (i == index) beat.copy(isEnabled = !beat.isEnabled) else beat
+        }
+
+        return true
+    }
+
+    fun toggleBeatAccent(index: Int) : Boolean
+    {
+        val current = beats
+        if (index !in current.indices) return false
+
+        beats = current.mapIndexed { i, beat ->
+            if (i == index) beat.copy(isAccent = !beat.isAccent) else beat
+        }
+
+        return true
+    }
+
+    fun resetPhase()
+    {
         sampleIndexInBeat = 0.0
         totalSamplesGenerated = 0
-        startTimeNanos = System.nanoTime()
-        beatsDelivered = 0
+        totalBeatsDelivered = 0
         currentBeatInMeasure = 0
-        currentClickSamples = accentClickSamples
     }
 
-    private var currentClickSamples: ShortArray = accentClickSamples
+    private fun getClickSamplesForCurrentBeat(): ShortArray?
+    {
+        val activeBeats = beats
+        if (activeBeats.isEmpty()) return null
 
-    fun fillNextChunk(buffer: ShortArray, bpm: Int) {
-        // 1. Calculate how many silent samples belong between ticks for current BPM
-        val samplesPerBeat = sampleRate * 60.0 / bpm
+        val safeIndex = currentBeatInMeasure.coerceIn(0, activeBeats.lastIndex)
+        val activeBeat = activeBeats[safeIndex]
 
-        for (i in buffer.indices)
+        return when {
+            !activeBeat.isEnabled -> null
+            activeBeat.isAccent -> accentClickSamples
+            else -> regularClickSamples
+        }
+    }
+
+    fun fillNextChunk(buffer: ShortArray, bpm: Int)
+    {
+        var bufferOffset = 0
+        val bufferLength = buffer.size
+
+        val samplesPerBeat = sampleRate * 60.0 / bpm.coerceAtLeast(1)
+
+        while (bufferOffset < bufferLength)
         {
-            val currentSampleIndexAsInt = sampleIndexInBeat.toInt()
-
-            if (currentSampleIndexAsInt in currentClickSamples.indices) {
-                buffer[i] = currentClickSamples[currentSampleIndexAsInt]
-            } else {
-                buffer[i] = 0
+            if (sampleIndexInBeat >= samplesPerBeat) {
+                advanceBeat(samplesPerBeat)
             }
 
-            sampleIndexInBeat += 1.0
-            totalSamplesGenerated++
+            val samplesRemainingInBeat = ceil(samplesPerBeat - sampleIndexInBeat).toInt().coerceAtLeast(1)
 
-            // samplesPerBeat = sr * 60 / BPM
-            // BPM = 133: samplesPerBeat = 44100 * 60 / 133 = 19894.7368
-            if (sampleIndexInBeat >= samplesPerBeat)
-            {
-                beatsDelivered++
+            val samplesToProcess = minOf(bufferLength - bufferOffset, samplesRemainingInBeat)
 
-                currentBeatInMeasure = (currentBeatInMeasure + 1) % beatsPerMeasure
+            renderUntilBeatOrBufferEnds(buffer, bufferOffset, samplesToProcess)
 
-                currentClickSamples = if (currentBeatInMeasure == 0) {
-                    accentClickSamples
-                } else {
-                    regularClickSamples
-                }
+            bufferOffset += samplesToProcess
+            sampleIndexInBeat += samplesToProcess
+            totalSamplesGenerated += samplesToProcess
 
-                // only apply phase correction mechanism if the corresponding flag is set
-                val phaseCorrection = if (enableWallClockSync) {
-                    // Calculate where sampleIndexInBeat SHOULD be based on nanosecond wall clock
-                    val elapsedNanos = System.nanoTime() - startTimeNanos
-                    val targetBeats = (elapsedNanos / 1_000_000_000.0) * (bpm / 60.0)
-                    val driftInBeats = beatsDelivered - targetBeats
-
-                    driftInBeats * 0.01 // Gentle 1% nudge
-                }
-                else {
-                    0.0
-                }
-
-                // float substraction to preserves fractional remainder -> no drift due to rounding
-                // phase correction will adjust the silence length
-                // to compensate to hardware clock inaccuracy
-                sampleIndexInBeat = (sampleIndexInBeat - samplesPerBeat) + phaseCorrection
+            if (sampleIndexInBeat >= samplesPerBeat) {
+                advanceBeat(samplesPerBeat)
             }
         }
+    }
+
+    private fun renderUntilBeatOrBufferEnds(
+        buffer: ShortArray,
+        bufferOffset: Int,
+        samplesToProcess: Int
+    ) {
+        // Fast SIMD-accelerated zero-fill of the slice
+        buffer.fill(0.toShort(), bufferOffset, bufferOffset + samplesToProcess)
+
+        val clickSamples = getClickSamplesForCurrentBeat() ?: return
+
+        // Calculate overlap between this segment and the click duration
+        val startOfChunk = sampleIndexInBeat.toInt()
+        val endOfChunk = startOfChunk + samplesToProcess
+
+        val overlapStart = maxOf(startOfChunk, 0)
+        val overlapEnd = minOf(endOfChunk, clickSamples.size)
+
+        if (overlapStart < overlapEnd) {
+            val copyLength = overlapEnd - overlapStart
+            val destPos = bufferOffset + (overlapStart - startOfChunk)
+
+            // Fast hardware block copy of the click audio
+            System.arraycopy(clickSamples, overlapStart, buffer, destPos, copyLength)
+        }
+    }
+
+    private fun advanceBeat(samplesPerBeat: Double)
+    {
+        totalBeatsDelivered++
+
+        val measures = beats.size
+        if (measures > 0) {
+            currentBeatInMeasure = (currentBeatInMeasure + 1) % measures
+        }
+
+        // Sub-sample remainder preserved to guarantee zero drift over time
+        sampleIndexInBeat -= samplesPerBeat
     }
 }

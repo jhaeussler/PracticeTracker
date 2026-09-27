@@ -12,8 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -69,13 +69,17 @@ fun RoundButtonWithIcon(
     enabled: Boolean = true,
     iconImage: ImageVector? = null,
     text: String? = null,
-    colors: IconButtonColors = IconButtonDefaults.filledIconButtonColors()
+    containerColor: Color = MaterialTheme.colorScheme.primary,
+    contentColor: Color = MaterialTheme.colorScheme.onPrimary,
 ) {
     FilledIconButton(
         onClick = onClick,
         shape = CircleShape,
         enabled = enabled,
-        colors = colors,
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        ),
         modifier = Modifier.size(56.dp)
     ) {
         if (iconImage != null) {

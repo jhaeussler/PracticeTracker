@@ -6,66 +6,65 @@
 package org.jhaeussler.practicetracker.ui.viewModels
 
 import android.content.Context
-import android.content.Intent
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 
-import org.jhaeussler.practicetracker.metronomservice.MetronomeService
+import org.jhaeussler.practicetracker.metronomservice.Beat
+import org.jhaeussler.practicetracker.metronomservice.MetronomeRepository
+import org.jhaeussler.practicetracker.metronomservice.MetronomeService.Companion.ACTION_TOGGLE_METRONOME
 
 class MetronomeViewModel(
 ) : ViewModel() {
-
-    val isMetronomeRunning: StateFlow<Boolean> = MetronomeService.isRunning
+    private val metronomeRepository = MetronomeRepository
+    val isMetronomeRunning: StateFlow<Boolean> = metronomeRepository.isRunning
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = false
         )
-    val bpm: StateFlow<Int> = MetronomeService.bpm
+    val bpm: StateFlow<Int> = metronomeRepository.bpm
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = 120
         )
-    val subdivisions : StateFlow<Int> = MetronomeService.subdivisions
+    val beats : StateFlow<List<Beat>> = metronomeRepository.beats
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = 4
+            initialValue = listOf()
         )
-    val currentBeatInMeasure : StateFlow<Int> = MetronomeService.currentBeatInMeasure
+    val currentBeatInMeasure : StateFlow<Int> = metronomeRepository.currentBeatInMeasure
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = 0
         )
 
-    fun startMetronomeService(context: Context) {
-        val intent = Intent(context, MetronomeService::class.java)
-        ContextCompat.startForegroundService(context, intent)
-    }
-    fun stopMetronomeService(context: Context) {
-        val intent = Intent(context, MetronomeService::class.java)
-        context.stopService(intent)
+    fun toggleMetronome(context: Context) {
+        metronomeRepository.sendCommandToMetronome(context, ACTION_TOGGLE_METRONOME)
     }
 
     fun incrementBpm() {
-        MetronomeService.setBpm(bpm.value + 1)
+        metronomeRepository.setBpm(bpm.value + 1)
     }
 
     fun decrementBpm() {
-        MetronomeService.setBpm(bpm.value - 1)
+        metronomeRepository.setBpm(bpm.value - 1)
     }
 
     fun setBpm(value: Int) {
-        MetronomeService.setBpm(value)
+        metronomeRepository.setBpm(value)
     }
 
-    fun setSubdivisions(value: Int) {
-        MetronomeService.setSubdivisions(value)
+    fun setSubdivisions(context: Context, value: Int) {
+        metronomeRepository.setSubdivisions(context, value)
+    }
+
+    fun toggleBeat(context: Context, index: Int) {
+        metronomeRepository.toggleBeat(context, index)
     }
 }
