@@ -156,8 +156,8 @@ class SessionTimerServiceTest {
         val title = notification?.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = notification?.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()
 
-        assertEquals("Ongoing Practice Session", title)
-        assertTrue(text?.contains("Duration: 00 sec.") == true)
+        assertEquals("Practice Session", title)
+        assertTrue(text?.contains("in Progress...") == true)
     }
 
     @Test
@@ -190,7 +190,7 @@ class SessionTimerServiceTest {
         assertEquals("Resume", notification.actions[0].title)
 
         val text = notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-        assertTrue(text?.contains("- Session Paused") == true)
+        assertTrue(text?.contains("So far:") == true)
     }
 
     @Test
