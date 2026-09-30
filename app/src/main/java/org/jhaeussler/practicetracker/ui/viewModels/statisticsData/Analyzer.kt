@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewmodels.statisticsData
+package org.jhaeussler.practicetracker.ui.viewModels.statisticsData
 
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import java.time.DayOfWeek

@@ -21,7 +21,7 @@ import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.components.ScrollableTable
-import org.jhaeussler.practicetracker.ui.viewmodels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
 
 
 @Composable

@@ -12,12 +12,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -29,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -37,10 +34,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
+import org.jhaeussler.practicetracker.metronomservice.Beat
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButtonRawString
+import org.jhaeussler.practicetracker.ui.components.RoundButtonWithIcon
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
-import org.jhaeussler.practicetracker.ui.viewmodels.MetronomeViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
 
 @Composable
 fun MetronomeScreen(
@@ -50,6 +49,9 @@ fun MetronomeScreen(
 
     val isRunning by metronomeViewModel.isMetronomeRunning.collectAsStateWithLifecycle()
     val bpm by metronomeViewModel.bpm.collectAsStateWithLifecycle()
+    val beats = metronomeViewModel.beats.collectAsStateWithLifecycle()
+    val currentBeatInMeasure by metronomeViewModel.currentBeatInMeasure.collectAsStateWithLifecycle()
+
 
     ScreenContainer(
         title = R.string.metronome_screen_title
@@ -58,6 +60,41 @@ fun MetronomeScreen(
             bpm,
             { metronomeViewModel.decrementBpm() },
             { metronomeViewModel.incrementBpm() },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        HorizontalDivider(
+            thickness = 2.dp,
+            color = Color.DarkGray,
+            modifier = Modifier.fillMaxWidth(0.7f)
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        SubdivisionSection(
+            beats = beats.value,
+            onToggleBeat = { index ->  metronomeViewModel.toggleBeat(context, index) },
+            currentBeatInMeasure = currentBeatInMeasure,
+            decrementSubdivision = { metronomeViewModel.setSubdivisions(context, beats.value.size -1) },
+            addSubdivision = { metronomeViewModel.setSubdivisions(context, beats.value.size +1) }
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        HorizontalDivider(
+            thickness = 2.dp,
+            color = Color.DarkGray,
+            modifier = Modifier.fillMaxWidth(0.7f)
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        PracticeAppButton(
+            onClick  = { metronomeViewModel.toggleMetronome(context) },
+            text = if (!isRunning) R.string.start else R.string.stop,
+            fontSize = 27,
+            modifier = Modifier.fillMaxWidth(0.7f).height(70.dp)
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -88,30 +125,7 @@ fun MetronomeScreen(
                 Pair(160, setBpmWrapper),
             )
         )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        HorizontalDivider(
-            thickness = 2.dp,
-            color = Color.DarkGray,
-            modifier = Modifier.fillMaxWidth(0.7f)
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        PracticeAppButton(
-            onClick  = {
-                if (!isRunning) {
-                    metronomeViewModel.startMetronomeService(context)
-                }
-                else {
-                    metronomeViewModel.stopMetronomeService(context)
-                }
-            },
-            text = if (!isRunning) R.string.start else R.string.stop,
-            fontSize = 27,
-            modifier = Modifier.fillMaxWidth(0.7f).height(70.dp)
-        )
+        Spacer(modifier = Modifier.height(40.dp))
     }
 }
 
@@ -127,16 +141,11 @@ fun BpmDisplayRow(
         ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FilledIconButton(
-            onClick = decrementBpm,
-            shape = CircleShape,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Remove,
-                contentDescription = "Decrease BPM"
-            )
-        }
+        RoundButtonWithIcon(
+            decrementBpm,
+            "Decrease BPM",
+            iconImage = Icons.Default.Remove
+        )
 
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -157,16 +166,103 @@ fun BpmDisplayRow(
             }
         }
 
-        FilledIconButton(
-            onClick = incrementBpm,
-            shape = CircleShape,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Increase BPM"
+        RoundButtonWithIcon(
+            incrementBpm,
+            "Increase BPM",
+            iconImage = Icons.Default.Add
+        )
+    }
+}
+
+@Composable
+fun SubdivisionSection(
+    beats: List<Beat>,
+    onToggleBeat: (Int) -> Unit,
+    currentBeatInMeasure: Int,
+    decrementSubdivision: () -> Unit,
+    addSubdivision: () -> Unit
+) {
+    val firstRow = beats.take(4)
+    val secondRow = beats.drop(4)
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        SubdivisionButtonRow(
+            firstRow,
+            0,
+            onToggleBeat,
+            currentBeatInMeasure = currentBeatInMeasure
+        )
+        if (beats.size > 4) {
+            Spacer(modifier = Modifier.height(20.dp))
+            SubdivisionButtonRow(
+                secondRow,
+                4,
+                onToggleBeat,
+                currentBeatInMeasure = currentBeatInMeasure
             )
         }
+        Spacer(modifier = Modifier.height(20.dp))
+        ChangeSubdivisionRow(
+            decrementSubdivision,
+            addSubdivision
+        )
+    }
+}
+
+@Composable
+fun SubdivisionButtonRow(
+    beats: List<Beat>,
+    firstIndex: Int = 0,
+    onToggleBeat: (Int) -> Unit,
+    currentBeatInMeasure: Int
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(
+            20.dp, alignment = Alignment.CenterHorizontally
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        beats.forEachIndexed { i, beat ->
+            val realIndex = firstIndex + i
+
+            RoundButtonWithIcon(
+                { onToggleBeat(realIndex) },
+                "${realIndex + 1}",
+                text = "${realIndex + 1}",
+                contentColor = if (beat.isEnabled) Color.White else Color.DarkGray,
+                containerColor = if (beat.index == currentBeatInMeasure) {
+                    if (beat.isEnabled) IconButtonDefaults.filledIconButtonColors().containerColor else Color.White
+                }
+                else {
+                    if (beat.isEnabled) Color.DarkGray else Color.LightGray
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun ChangeSubdivisionRow(
+    decrementSubdivision: () -> Unit,
+    addSubdivision: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(
+            20.dp, alignment = Alignment.CenterHorizontally
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RoundButtonWithIcon(
+            decrementSubdivision,
+            "Decrease Subdivisions",
+            iconImage = Icons.Default.Remove
+        )
+
+        RoundButtonWithIcon(
+            addSubdivision,
+            "Add Subdivisions",
+            iconImage = Icons.Default.Add
+        )
     }
 }
 

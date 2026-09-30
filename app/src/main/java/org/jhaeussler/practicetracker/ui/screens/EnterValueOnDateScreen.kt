@@ -27,7 +27,7 @@ import org.jhaeussler.practicetracker.ui.components.DateInputWithPicker
 import org.jhaeussler.practicetracker.ui.components.NumberInputField
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
-import org.jhaeussler.practicetracker.ui.viewmodels.EnterValueOnDateViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.EnterValueOnDateViewModel
 import kotlinx.coroutines.launch
 
 @Composable

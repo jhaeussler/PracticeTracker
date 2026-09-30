@@ -10,11 +10,11 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import org.jhaeussler.practicetracker.ui.viewmodels.DbDataViewModel
-import org.jhaeussler.practicetracker.ui.viewmodels.EnterValueOnDateViewModel
-import org.jhaeussler.practicetracker.ui.viewmodels.MetronomeViewModel
-import org.jhaeussler.practicetracker.ui.viewmodels.statisticsData.StatisticsViewModel
-import org.jhaeussler.practicetracker.ui.viewmodels.OverviewViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.DbDataViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.EnterValueOnDateViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.ui.viewModels.OverviewViewModel
 
 object AppViewModelProvider {
     val Factory = viewModelFactory {

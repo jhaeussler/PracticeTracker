@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.ui.viewmodels
+package org.jhaeussler.practicetracker.ui.viewModels
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
