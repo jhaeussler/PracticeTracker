@@ -1,28 +1,22 @@
-/*
- * SPDX-License-Identifier: MIT
- * Copyright (c) 2026 J. Häußler
- */
-
-package org.jhaeussler.practicetracker
+package org.jhaeussler.practicetracker.ui.viewModels
 
 import android.util.Log
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
-
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
-import org.jhaeussler.practicetracker.ui.viewModels.EnterValueOnDateViewModel
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
+import org.jhaeussler.practicetracker.MainDispatcherRule
 import org.junit.After
-import org.junit.Assert.assertNull
+import org.junit.Assert
 import org.junit.Before
+
 import java.time.LocalDate
 
-class EnterDateValueViewModelTest {
+class EnterValueOnDateViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
@@ -65,8 +59,8 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertEquals(result?.value, expectedDuration)
-        assertEquals(result?.date, expectedDate)
+        Assert.assertEquals(result?.value, expectedDuration)
+        Assert.assertEquals(result?.date, expectedDate)
 
         // Leap Year
         testDate = "29.02.2028"
@@ -82,7 +76,7 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertEquals(result?.date, expectedDate)
+        Assert.assertEquals(result?.date, expectedDate)
     }
 
     @Test
@@ -98,7 +92,7 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertNull(result)
+        Assert.assertNull(result)
 
         testDate = "01.13.2026"
 
@@ -107,7 +101,7 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertNull(result)
+        Assert.assertNull(result)
 
         testDate = "31.12.2023"
 
@@ -116,7 +110,7 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertNull(result)
+        Assert.assertNull(result)
 
         testDate = "30.02.2026"
 
@@ -125,7 +119,7 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertNull(result)
+        Assert.assertNull(result)
 
         // 2024 & 2028 are leap years
         testDate = "29.02.2026"
@@ -135,6 +129,6 @@ class EnterDateValueViewModelTest {
             dateInput = testDate
         )
 
-        assertNull(result)
+        Assert.assertNull(result)
     }
 }

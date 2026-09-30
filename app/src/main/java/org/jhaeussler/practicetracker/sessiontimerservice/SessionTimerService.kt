@@ -5,6 +5,7 @@
 
 package org.jhaeussler.practicetracker.sessiontimerservice
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -124,10 +125,13 @@ class SessionTimerService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Practice Session Notifications", // Channel Name
-            NotificationManager.IMPORTANCE_LOW // Importance level
+            "Practice Session Notifications",
+            NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             description = "Practice Session Notification channel"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setSound(null, null)
+            enableVibration(false)
         }
 
         // Register the channel with the system
@@ -160,35 +164,41 @@ class SessionTimerService : Service() {
                 )
         }
 
-        fun getTimerNotificationText() : String {
-            return "Duration: ${secondsToNiceString(_elapsedTimeSec.value)}"
-        }
-
         val currentState = _timerState.value
+        val isRunning = currentState == TimerState.RUNNING
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Ongoing Practice Session")
-            .setContentText(
-                if (currentState == TimerState.PAUSED)
-                    "${getTimerNotificationText()} - Session Paused"
-                else
-                    getTimerNotificationText()
-            )
+            .setContentTitle("Practice Session")
             .setContentIntent(contentIntent)
             .setSmallIcon(R.drawable.timelapse)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(currentState == TimerState.RUNNING)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setOngoing(currentState != TimerState.STOPPED)
             .setOnlyAlertOnce(true)
-            .setUsesChronometer(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+
+        builder.setRequestPromotedOngoing(true)
 
         // Lock screen & tray action buttons
-        if (currentState == TimerState.RUNNING)
+        if (isRunning)
         {
+            // Native Chronometer: Ticks smoothly on lock screen without waking CPU
+            val baseSystemTime = System.currentTimeMillis() - (_elapsedTimeSec.value * 1000L)
+            builder.setUsesChronometer(true)
+                .setWhen(baseSystemTime)
+                .setShowWhen(true)
+                .setContentText("in Progress...")
+
             val pausePendingIntent =
                 getPendingIntent(1, getIntentForAction(ACTION_PAUSE))
             builder.addAction(R.drawable.timelapse, "Pause", pausePendingIntent)
         }
-        else if (currentState == TimerState.PAUSED)
-        {
+        else {
+            builder.setUsesChronometer(false)
+                .setShowWhen(false)
+                .setSubText("Paused")
+                .setContentText("So far: ${secondsToNiceString(_elapsedTimeSec.value)}")
+
             val resumePendingIntent =
                 getPendingIntent(2, getIntentForAction(ACTION_START))
             builder.addAction(R.drawable.timelapse, "Resume", resumePendingIntent)
