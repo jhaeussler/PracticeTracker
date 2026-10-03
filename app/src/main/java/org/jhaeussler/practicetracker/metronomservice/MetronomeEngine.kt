@@ -38,7 +38,7 @@ class MetronomeEngine(
         val numSamples = ((sampleRate / 1000.0) * clickDurationMs).toInt()
         val samples = ShortArray(numSamples)
 
-        val decayFactor = 3.0
+        val decayFactor = 1.0
         val minExp = exp(-decayFactor)
         val scale = 1.0 / (1.0 - minExp)
 
