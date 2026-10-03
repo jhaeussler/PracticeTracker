@@ -46,11 +46,13 @@ object MetronomeRepository
             value.coerceIn(1, MAX_SUBDIVISIONS)
         )
     }
+
     fun toggleBeat(context: Context, index: Int) {
         sendCommandToMetronome(
             context, MetronomeService.ACTION_TOGGLE_BEAT, index
         )
     }
+
     fun sendCommandToMetronome(context: Context, actionToSend: String, extraValue: Int? = null) {
         val intent = Intent(context, MetronomeService::class.java).apply {
             action = actionToSend

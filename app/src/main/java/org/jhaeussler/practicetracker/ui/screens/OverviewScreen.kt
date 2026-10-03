@@ -71,12 +71,12 @@ fun OverviewScreen(
     val okBtnColor = Color(0.2f, 0.8f, 0.5f)
 
     val requestPermissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                // Permission granted, start the timer service
-                timeViewModel.toggleTimer()
-            } else {
-                // Permission denied
+                timeViewModel.sessionNotificationGranted()
+            }
+            else {
                 Toast.makeText(
                     context,
                     "Permission denied. Timer cannot run.",
@@ -95,7 +95,7 @@ fun OverviewScreen(
         ) {
             PracticeAppButton(
                 onClick  = {
-                    timeViewModel.requestTimerService() { permission ->
+                    timeViewModel.requestTimerService { permission ->
                     requestPermissionLauncher.launch(permission) }
                 },
                 text = when (timerState) {

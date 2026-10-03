@@ -6,6 +6,9 @@
 package org.jhaeussler.practicetracker.metronomservice
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationManager
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
@@ -17,7 +20,9 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -26,7 +31,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 
-const val TEST_SAMPLE_RATE = 44100
+const val TEST_SAMPLE_RATE = 48000
 
 @RunWith(RobolectricTestRunner::class)
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -413,6 +418,198 @@ class MetronomeServiceTest {
 
         assertFalse(repository.isRunning.value)
         assertTrue(Shadows.shadowOf(service).isStoppedBySelf)
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `notification contains correct title, current BPM, and stop action button`() {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        repository.setBpm(135)
+
+        service.onStartCommand(Intent(context, MetronomeService::class.java).apply {
+            action = MetronomeService.ACTION_START_METRONOME
+        }, 0, 1)
+
+        val shadowService = Shadows.shadowOf(service)
+        val notification = shadowService.lastForegroundNotification
+
+        assertNotNull(notification)
+        assertEquals("Metronome", notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+        assertEquals("135 BPM", notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        assertTrue("Notification must be ongoing", notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
+
+        // Verify the "Stop" action button exists on the notification
+        assertNotNull(notification.actions)
+        val stopAction = notification.actions.firstOrNull { it.title.toString() == "Stop" }
+        assertNotNull("Notification must contain a 'Stop' action", stopAction)
+
+        // Verify tapping the stop action delivers ACTION_STOP_METRONOME
+        val shadowPendingIntent = Shadows.shadowOf(stopAction?.actionIntent)
+        val deliveredIntent = shadowPendingIntent.savedIntent
+        assertEquals(MetronomeService.ACTION_STOP_METRONOME, deliveredIntent.action)
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `changing BPM updates notification after debounce when metronome is running`() = runTest {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        service.onStartCommand(Intent(context, MetronomeService::class.java).apply {
+            action = MetronomeService.ACTION_START_METRONOME
+        }, 0, 1)
+
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        val shadowNotificationManager = Shadows.shadowOf(notificationManager)
+
+        // Change BPM while playing
+        repository.setBpm(180)
+
+        var updatedNotification = shadowNotificationManager.getNotification(420)
+        assertNotNull(updatedNotification)
+        assertNotEquals("180 BPM", updatedNotification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+
+        // Fast-forward past the 200ms debounce window on the main looper
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
+
+        updatedNotification = shadowNotificationManager.getNotification(420)
+        assertEquals("180 BPM", updatedNotification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `changing BPM does not post or update notification when metronome is stopped`() = runTest {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        controller.create().get()
+
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        val shadowNotificationManager = Shadows.shadowOf(notificationManager)
+
+        // Change BPM while stopped
+        repository.setBpm(150)
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
+
+        // No notification should have been posted
+        val notification = shadowNotificationManager.getNotification(420)
+        assertNull(notification)
+
+        controller.destroy()
+    }
+
+    // --- Audio Focus Edge Cases ---
+
+    @Test
+    fun `audio focus loss transient stops playback`() {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        service.onStartCommand(Intent(context, MetronomeService::class.java).apply {
+            action = MetronomeService.ACTION_START_METRONOME
+        }, 0, 1)
+        assertTrue(repository.isRunning.value)
+
+        val audioManager = context.getSystemService(AudioManager::class.java)
+        val shadowAudioManager = Shadows.shadowOf(audioManager)
+
+        // Simulate a temporary audio interruption (e.g. incoming notification chime / GPS prompt)
+        shadowAudioManager.lastAudioFocusRequest?.listener?.onAudioFocusChange(
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT
+        )
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+
+        assertFalse(repository.isRunning.value)
+        assertTrue(Shadows.shadowOf(service).isStoppedBySelf)
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `handleStart aborts and calls stopSelf if audio focus request is denied`() {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        val audioManager = context.getSystemService(AudioManager::class.java)
+        val shadowAudioManager = Shadows.shadowOf(audioManager)
+
+        // Simulate phone call / system denying audio focus
+        shadowAudioManager.setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+
+        service.onStartCommand(Intent(context, MetronomeService::class.java).apply {
+            action = MetronomeService.ACTION_START_METRONOME
+        }, 0, 1)
+
+        // Playback must not start, notification must not be posted, and service must self-terminate
+        assertFalse(repository.isRunning.value)
+        assertTrue(Shadows.shadowOf(service).isStoppedBySelf)
+        assertNull(Shadows.shadowOf(service).lastForegroundNotification)
+
+        controller.destroy()
+    }
+
+    // --- Intent Routing & Lifecycle Edge Cases ---
+
+    @Test
+    fun `unrecognized action stops service if metronome is not running`() {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        assertFalse(repository.isRunning.value)
+
+        // Send unexpected or null intent while idle
+        val unknownIntent = Intent(context, MetronomeService::class.java).apply {
+            action = "UNRECOGNIZED_ACTION"
+        }
+        val result = service.onStartCommand(unknownIntent, 0, 1)
+
+        assertEquals(Service.START_NOT_STICKY, result)
+        assertTrue(Shadows.shadowOf(service).isStoppedBySelf)
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `unrecognized action does not stop service if metronome is actively running`() {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        // Start playback first
+        service.onStartCommand(Intent(context, MetronomeService::class.java).apply {
+            action = MetronomeService.ACTION_START_METRONOME
+        }, 0, 1)
+        assertTrue(repository.isRunning.value)
+
+        // Deliver unknown intent while running
+        val unknownIntent = Intent(context, MetronomeService::class.java).apply {
+            action = "UNRECOGNIZED_ACTION"
+        }
+        service.onStartCommand(unknownIntent, 0, 2)
+
+        // Metronome must keep running uninterrupted
+        assertTrue(repository.isRunning.value)
+        assertFalse(Shadows.shadowOf(service).isStoppedBySelf)
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `ACTION_SET_SUBDIVISION updates current beat state in repository`() {
+        val controller = Robolectric.buildService(MetronomeService::class.java)
+        val service = controller.create().get()
+
+        // Set to a 3-beat measure
+        service.onStartCommand(Intent(context, MetronomeService::class.java).apply {
+            action = MetronomeService.ACTION_SET_SUBDIVISION
+            putExtra(MetronomeService.EXTRA_VALUE, 3)
+        }, 0, 1)
+
+        assertEquals(0, repository.currentBeatInMeasure.value)
+        assertEquals(3, repository.beats.value.size)
+        assertFalse(repository.isRunning.value)
 
         controller.destroy()
     }

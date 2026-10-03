@@ -40,6 +40,8 @@ class SessionTimerService : Service() {
         const val ACTION_PAUSE = "ACTION_PAUSE"
         const val ACTION_RESET = "ACTION_RESET"
 
+        const val ACTION_NOTIFICATION_GRANTED = "ACTION_NOTIFICATION_GRANTED"
+
         private val _timerState = MutableStateFlow(TimerState.STOPPED)
         val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
 
@@ -55,34 +57,47 @@ class SessionTimerService : Service() {
 
         // Helper methods for ViewModels to trigger service intents easily
         fun startTimer(context: Context) {
+            if (_timerState.value == TimerState.RUNNING) return
+
             val intent = Intent(context,
                 SessionTimerService::class.java).apply { action = ACTION_START }
             context.startForegroundService(intent)
         }
 
         fun pauseTimer(context: Context) {
+            if (_timerState.value != TimerState.RUNNING) return
+
             val intent = Intent(context,
                 SessionTimerService::class.java).apply { action = ACTION_PAUSE }
             context.startService(intent)
         }
 
         fun resetTimer(context: Context) {
+            if (_timerState.value == TimerState.STOPPED) return
+
             val intent = Intent(context,
                 SessionTimerService::class.java).apply { action = ACTION_RESET }
             context.startService(intent)
         }
+
+        fun notificationGranted(context: Context) {
+            if (_timerState.value == TimerState.STOPPED) return
+
+            val intent = Intent(context,
+                SessionTimerService::class.java).apply { action = ACTION_NOTIFICATION_GRANTED }
+
+            context.startService(intent)
+        }
     }
 
-    private val timerRunnable = object : Runnable {
-        override fun run()
-        {
+    private val timerRunnable = object : Runnable
+    {
+        override fun run() {
             if (_timerState.value != TimerState.RUNNING) return
 
-            val currentTime = SystemClock.elapsedRealtime()
-            val totalElapsedMillis = currentTime - sessionStartTimeMillis - totalPausedDurationMillis
-            _elapsedTimeSec.value = totalElapsedMillis / TIMER_TICK
+            val totalElapsedMillis = getCurrentElapsedMillis()
 
-            updateNotification()
+            _elapsedTimeSec.value = totalElapsedMillis / TIMER_TICK
 
             val timeToNextSecond = TIMER_TICK - (totalElapsedMillis % TIMER_TICK)
 
@@ -97,14 +112,7 @@ class SessionTimerService : Service() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(timerRunnable)
         stopTimer()
-
-        if (_timerState.value != TimerState.STOPPED) {
-            _timerState.value = TimerState.STOPPED
-            _elapsedTimeSec.value = 0L
-            _sessionStartDate.value = null
-        }
 
         super.onDestroy()
     }
@@ -113,12 +121,42 @@ class SessionTimerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action ?: intent?.getStringExtra("action")) {
-            ACTION_START, "startTimer" -> handleStartTimer()
-            ACTION_PAUSE, "pauseTimer" -> handlePauseTimer()
+            ACTION_START -> handleStartTimer()
+            ACTION_PAUSE -> handlePauseTimer()
             ACTION_RESET -> handleResetTimer()
+            ACTION_NOTIFICATION_GRANTED -> handleNotificationPermissionGranted()
+            else -> {
+                if (_timerState.value == TimerState.STOPPED) {
+                    stopSelf()
+                }
+            }
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    private fun getCurrentElapsedMillis(): Long {
+        if (sessionStartTimeMillis == 0L) return 0L
+        val referenceTime = if (_timerState.value == TimerState.PAUSED) {
+            timePausedAtMillis
+        } else {
+            SystemClock.elapsedRealtime()
+        }
+        return referenceTime - sessionStartTimeMillis - totalPausedDurationMillis
+    }
+
+    private fun getIntentForAction( actionToSet: String) : Intent {
+        return Intent(this,
+            SessionTimerService::class.java).apply { action = actionToSet }
+    }
+
+    private fun getPendingIntent(requestCode: Int, intent: Intent) : PendingIntent {
+        return PendingIntent.getService(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     // Notification channel for timer notification
@@ -137,20 +175,6 @@ class SessionTimerService : Service() {
         // Register the channel with the system
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(channel)
-    }
-
-    private fun getIntentForAction( actionToSet: String) : Intent {
-        return Intent(this,
-            SessionTimerService::class.java).apply { action = actionToSet }
-    }
-
-    private fun getPendingIntent(requestCode: Int, intent: Intent) : PendingIntent {
-        return PendingIntent.getService(
-            this,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
     }
 
     private fun buildNotification(): NotificationCompat.Builder {
@@ -183,7 +207,7 @@ class SessionTimerService : Service() {
         if (isRunning)
         {
             // Native Chronometer: Ticks smoothly on lock screen without waking CPU
-            val baseSystemTime = System.currentTimeMillis() - (_elapsedTimeSec.value * 1000L)
+            val baseSystemTime = System.currentTimeMillis() - getCurrentElapsedMillis()
             builder.setUsesChronometer(true)
                 .setWhen(baseSystemTime)
                 .setShowWhen(true)
@@ -231,14 +255,9 @@ class SessionTimerService : Service() {
             totalPausedDurationMillis += pauseDuration
         }
 
-        val isFirstStart = _timerState.value == TimerState.STOPPED
         _timerState.value = TimerState.RUNNING
+        startForegroundService()
 
-        if (isFirstStart) {
-            startForegroundService()
-        } else {
-            updateNotification()
-        }
         handler.removeCallbacks(timerRunnable)
         handler.post(timerRunnable)
     }
@@ -258,22 +277,28 @@ class SessionTimerService : Service() {
             stopTimer()
         }
 
-        _elapsedTimeSec.value = 0L
-        sessionStartTimeMillis = 0L
-        timePausedAtMillis = 0L
-        totalPausedDurationMillis = 0L
-        _sessionStartDate.value = null
-
         stopSelf()
     }
 
+    private fun handleNotificationPermissionGranted() {
+        if (_timerState.value != TimerState.STOPPED) {
+            startForegroundService()
+        }
+    }
+
     private fun stopTimer() {
-        if (_timerState.value in setOf(TimerState.RUNNING, TimerState.PAUSED))
+        if (_timerState.value != TimerState.STOPPED)
         {
             handler.removeCallbacks(timerRunnable)
             _timerState.value = TimerState.STOPPED
 
             stopForeground(STOP_FOREGROUND_REMOVE)
+
+            _elapsedTimeSec.value = 0L
+            sessionStartTimeMillis = 0L
+            timePausedAtMillis = 0L
+            totalPausedDurationMillis = 0L
+            _sessionStartDate.value = null
         }
     }
 
