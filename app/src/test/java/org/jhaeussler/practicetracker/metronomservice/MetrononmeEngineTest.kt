@@ -9,6 +9,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -27,9 +28,9 @@ class MetronomeEngineTest {
 
     @Test
     fun `clickSamples generates correct length and non-zero sine audio`() {
-        // 10ms at 44100  = 441 samples
-        assertEquals(441, engine.regularClickSamples.size)
-        assertEquals(441, engine.accentClickSamples.size)
+        // 10ms at 44800  = 480 samples
+        assertEquals(TEST_SAMPLE_RATE / 100, engine.regularClickSamples.size)
+        assertEquals(TEST_SAMPLE_RATE / 100, engine.accentClickSamples.size)
 
         // First sample of sine(0) is 0, second sample must be positive audio signal
         assertEquals(0, engine.regularClickSamples[0].toInt())
@@ -170,27 +171,32 @@ class MetronomeEngineTest {
         engine.fillNextChunk(buffer120Bpm, 120)
 
         // 120 BPM stream should contain a second tick pulse midway, while 60 BPM stream is silent
-        val midpoint = 22051
+        val midpoint = TEST_SAMPLE_RATE / 2 + 1
         assertEquals(0.toShort(), buffer60Bpm[midpoint])
         assertNotEquals(0.toShort(), buffer120Bpm[midpoint])
     }
 
     @Test
     fun `resetPhase sets sample counters to zero and resets click sound`() {
-        val buffer = ShortArray(22051)
+        val buffer = ShortArray(TEST_SAMPLE_RATE / 2 + 1)
         engine.fillNextChunk(buffer, bpm = 120)
 
         assertTrue(engine.totalSamplesGenerated > 0)
         assertTrue(engine.sampleIndexInBeat > 0)
         assertTrue(engine.currentBeatInMeasure > 0)
 
-        engine.resetPhase()
+        engine.resetPhase(false)
 
-        assertEquals(0L, engine.totalSamplesGenerated)
+        assertEquals(buffer.size.toLong(), engine.totalSamplesGenerated)
         assertEquals(0.0, engine.sampleIndexInBeat, 0.0)
 
         engine.fillNextChunk(buffer, bpm = 120)
         assertEquals(buffer[1], engine.accentClickSamples[1])
+
+        engine.resetPhase(true)
+
+        assertEquals(0L, engine.totalSamplesGenerated)
+        assertEquals(0.0, engine.sampleIndexInBeat, 0.0)
     }
 
     @Test
@@ -214,7 +220,7 @@ class MetronomeEngineTest {
         engine.setSubdivision(4)
 
         val bpm = 60 // 44,100 samples per beat
-        val beatBuffer = ShortArray(44100)
+        val beatBuffer = ShortArray(TEST_SAMPLE_RATE)
 
         // Beat 0: Fill buffer for first beat
         engine.fillNextChunk(beatBuffer, bpm)
@@ -227,7 +233,7 @@ class MetronomeEngineTest {
         assertEquals(1, engine.currentBeatInMeasure)
 
         // Beat 1: buffer for second beat
-        val beat1Buffer = ShortArray(44100)
+        val beat1Buffer = ShortArray(TEST_SAMPLE_RATE)
 
         engine.fillNextChunk(beat1Buffer, bpm)
         assertEquals(
@@ -419,25 +425,25 @@ class MetronomeEngineTest {
     @Test
     fun `single buffer spanning across a beat boundary contains silence then new beat click`() {
         engine.resetPhase()
-        val bpm = 120 // 22,050 samples per beat
+        val bpm = 120 // 24 000 samples per beat
 
-        val initialBuffer = ShortArray(20000)
+        val initialBuffer = ShortArray(22000)
         engine.fillNextChunk(initialBuffer, bpm)
         assertEquals(0, engine.currentBeatInMeasure)
 
-        // It should contain 2,050 samples of Beat 0 silence,
-        // followed by the Beat 1 regular click starting at index 2050.
+        // It should contain 2,000 samples of Beat 0 silence,
+        // followed by the Beat 1 regular click starting at index 2000.
         val straddlingBuffer = ShortArray(5000)
         engine.fillNextChunk(straddlingBuffer, bpm)
 
-        // First 2050 samples should be silence (end of Beat 0)
-        for (i in 0 until 2050) {
+        // First 2000 samples should be silence (end of Beat 0)
+        for (i in 0 until 2000) {
             assertEquals(0.toShort(), straddlingBuffer[i])
         }
 
         // Beat 1 should start at index 2050 (regular click)
-        assertEquals(engine.regularClickSamples[0], straddlingBuffer[2050])
-        assertEquals(engine.regularClickSamples[1], straddlingBuffer[2051])
+        assertEquals(engine.regularClickSamples[0], straddlingBuffer[2000])
+        assertEquals(engine.regularClickSamples[1], straddlingBuffer[2001])
 
         assertEquals(1, engine.currentBeatInMeasure)
     }
@@ -458,7 +464,6 @@ class MetronomeEngineTest {
 
         assertEquals(engine.regularClickSamples[1], buffer[samplesPerBeat * 2 + 1])
 
-        assertEquals(2L, engine.totalBeatsDelivered)
         assertEquals(2, engine.currentBeatInMeasure)
     }
 
@@ -498,5 +503,191 @@ class MetronomeEngineTest {
         val samplesBefore = engine.totalSamplesGenerated
         engine.fillNextChunk(emptyBuffer, bpm = 120)
         assertEquals(samplesBefore, engine.totalSamplesGenerated)
+    }
+
+    // --- BeatEvent Queue & Hardware Sync Tests ---
+
+    @Test
+    fun `resetPhase initializes beatQueue with Beat 0 at sample position 0`() {
+        engine.resetPhase()
+
+        assertEquals(1, engine.beatQueue.size)
+
+        val initialEvent = engine.beatQueue.peek()
+        assertNotNull(initialEvent)
+        assertEquals(0L, initialEvent?.samplePosition)
+        assertEquals(0, initialEvent?.beatIndex)
+    }
+
+    @Test
+    fun `beatQueue enqueues accurate samplePositions across multiple beats`() {
+        engine.resetPhase()
+
+        val bpm = 120 // At 48,000 Hz -> 24,000 samples per beat
+        val samplesPerBeat = (TEST_SAMPLE_RATE * 60.0 / bpm).roundToLong()
+        val buffer = ShortArray(samplesPerBeat.toInt())
+
+        engine.fillNextChunk(buffer, bpm)
+        engine.fillNextChunk(buffer, bpm)
+        engine.fillNextChunk(buffer, bpm)
+
+        assertEquals(4, engine.beatQueue.size)
+
+        val events = engine.beatQueue.toList()
+
+        // Beat 0: Initial beat at start
+        assertEquals(0L, events[0].samplePosition)
+        assertEquals(0, events[0].beatIndex)
+
+        // Beat 1: Occurred after exactly 1 beat's worth of samples
+        assertEquals(samplesPerBeat, events[1].samplePosition)
+        assertEquals(1, events[1].beatIndex)
+
+        assertEquals(samplesPerBeat * 2, events[2].samplePosition)
+        assertEquals(2, events[2].beatIndex)
+
+        assertEquals(samplesPerBeat * 3, events[3].samplePosition)
+        assertEquals(3, events[3].beatIndex)
+    }
+
+    @Test
+    fun `beatQueue handles beat rollover indices correctly across measure boundaries`() {
+        engine.setSubdivision(3) // 3/4 time signature (indices: 0, 1, 2 -> 0, 1...)
+        engine.resetPhase()
+
+        val bpm = 240
+        val samplesPerBeat = (TEST_SAMPLE_RATE * 60.0 / bpm).toInt()
+        val buffer = ShortArray(samplesPerBeat)
+
+        // Render 4 beats (indices: 0 -> 1 -> 2 -> 0)
+        repeat(4) {
+            engine.fillNextChunk(buffer, bpm)
+        }
+
+        val events = engine.beatQueue.toList()
+        assertEquals(5, events.size)
+
+        val beatIndices = events.map { it.beatIndex }
+        assertEquals(listOf(0, 1, 2, 0, 1), beatIndices)
+    }
+
+    @Test
+    fun `buffer spanning across a beat boundary enqueues event at exact split position`() {
+        engine.resetPhase()
+        val bpm = 120 // 24,000 samples per beat
+
+        // 1. Fill 20,000 samples (4,000 samples remaining before Beat 1)
+        val firstChunk = ShortArray(20000)
+        engine.fillNextChunk(firstChunk, bpm)
+
+        assertEquals(1, engine.beatQueue.size) // Only initial Beat 0
+
+        // 2. Fill 10,000 samples (straddles the 24,000 boundary at local index 4,000)
+        val straddlingChunk = ShortArray(10000)
+        engine.fillNextChunk(straddlingChunk, bpm)
+
+        assertEquals(2, engine.beatQueue.size)
+
+        val events = engine.beatQueue.toList()
+        assertEquals(0L, events[0].samplePosition)
+        assertEquals(0, events[0].beatIndex)
+
+        // Beat 1 should be stamped at global sample 24,000
+        assertEquals((TEST_SAMPLE_RATE * 60.0 / bpm).toLong(), events[1].samplePosition)
+        assertEquals(1, events[1].beatIndex)
+    }
+
+    @Test
+    fun `single large buffer enqueues all spanned beat events`() {
+        engine.resetPhase()
+        val bpm = 240
+        val samplesPerBeat = (TEST_SAMPLE_RATE * 60.0 / bpm).toInt()
+
+        // Sized to fit exactly 3 full beats
+        val largeBuffer = ShortArray(samplesPerBeat * 3)
+        engine.fillNextChunk(largeBuffer, bpm)
+
+        // Expecting 4 events: Initial Beat 0, plus Beat 1, Beat 2, Beat 3
+        assertEquals(4, engine.beatQueue.size)
+
+        val events = engine.beatQueue.toList()
+        for (i in events.indices) {
+            assertEquals((i * samplesPerBeat).toLong(), events[i].samplePosition)
+            assertEquals(i % 4, events[i].beatIndex)
+        }
+    }
+
+    @Test
+    fun `setting subdivisions or custom beats list clears and resets beatQueue`() {
+        val bpm = 120
+        val buffer = ShortArray(TEST_SAMPLE_RATE)
+
+        // Accumulate some beats in the queue
+        engine.fillNextChunk(buffer, bpm)
+        assertTrue(engine.beatQueue.size > 1)
+
+        // Changing subdivision internally invokes resetPhase()
+        engine.setSubdivision(5)
+
+        assertEquals(1, engine.beatQueue.size)
+        val event = engine.beatQueue.peek()
+        assertEquals(buffer.size.toLong(), event?.samplePosition)
+        assertEquals(0, event?.beatIndex)
+
+        // Setting beat list also resets queue
+        engine.fillNextChunk(buffer, bpm)
+        assertTrue(engine.beatQueue.size > 1)
+
+        engine.setBeatsList(listOf(Beat(0), Beat(1)))
+        assertEquals(1, engine.beatQueue.size)
+        assertEquals(buffer.size.toLong() * 2, engine.beatQueue.peek()?.samplePosition)
+    }
+
+    @Test
+    fun `simulating AudioTrack playbackHeadPosition consumer drains queue accurately`() {
+        engine.resetPhase()
+        val bpm = 120 // 24,000 samples per beat
+        val samplesPerBeat = (TEST_SAMPLE_RATE * 60.0 / bpm).toLong()
+
+        // Pre-fill audio buffer (generating 3 beats ahead)
+        val buffer = ShortArray((samplesPerBeat * 3).toInt())
+        engine.fillNextChunk(buffer, bpm)
+
+        assertEquals(4, engine.beatQueue.size)
+
+        // Simulate AudioTrack draining frames:
+
+        // 1. Playback starts at sample 0 -> Beat 0 should be consumed
+        var currentPlaybackHead = 0L
+        var activeBeat = -1
+        while (engine.beatQueue.peek()?.let { it.samplePosition <= currentPlaybackHead } == true) {
+            activeBeat = engine.beatQueue.poll()!!.beatIndex
+        }
+        assertEquals(0, activeBeat)
+        assertEquals(3, engine.beatQueue.size)
+
+        // 2. Playback advances midway through Beat 0 (sample 12,000) -> Still Beat 0
+        currentPlaybackHead = 12000L
+        while (engine.beatQueue.peek()?.let { it.samplePosition <= currentPlaybackHead } == true) {
+            activeBeat = engine.beatQueue.poll()!!.beatIndex
+        }
+        assertEquals(0, activeBeat) // No new beat polled
+        assertEquals(3, engine.beatQueue.size)
+
+        // 3. Playback reaches sample 24,000 -> Beat 1 consumed
+        currentPlaybackHead = samplesPerBeat
+        while (engine.beatQueue.peek()?.let { it.samplePosition <= currentPlaybackHead } == true) {
+            activeBeat = engine.beatQueue.poll()!!.beatIndex
+        }
+        assertEquals(1, activeBeat)
+        assertEquals(2, engine.beatQueue.size)
+
+        // 4. Playback jumps past Beat 2 and Beat 3 (e.g. sample 80,000) -> Drains both, ends on Beat 3
+        currentPlaybackHead = samplesPerBeat * 3 + 1000
+        while (engine.beatQueue.peek()?.let { it.samplePosition <= currentPlaybackHead } == true) {
+            activeBeat = engine.beatQueue.poll()!!.beatIndex
+        }
+        assertEquals(3, activeBeat)
+        assertTrue(engine.beatQueue.isEmpty())
     }
 }

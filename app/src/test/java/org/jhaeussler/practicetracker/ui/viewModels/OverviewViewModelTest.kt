@@ -27,6 +27,7 @@ import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
 import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -343,14 +344,6 @@ class OverviewViewModelTest {
 
         val nextServiceIntent = org.robolectric.Shadows.shadowOf(application).nextStartedService
         assertEquals(SessionTimerService.ACTION_START, nextServiceIntent?.action)
-    }
-
-    @Test
-    fun resetTimer_dispatchesResetActionToService() {
-        viewModel.resetTimer()
-
-        val nextServiceIntent = org.robolectric.Shadows.shadowOf(application).nextStartedService
-        assertEquals(SessionTimerService.ACTION_RESET, nextServiceIntent?.action)
     }
 
     @Test

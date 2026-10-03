@@ -24,14 +24,16 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-import kotlin.concurrent.Volatile
 import android.os.PowerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.debounce
 import kotlin.concurrent.thread
+import kotlin.time.Duration.Companion.milliseconds
 
 class MetronomeService : Service() {
     companion object {
@@ -45,12 +47,10 @@ class MetronomeService : Service() {
         // private
         private const val CHANNEL_ID = "metronome_channel"
         private const val NOTIFICATION_ID = 420
-        private const val SAMPLE_RATE = 44100
         private const val WAKELOCK_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
+        private var SAMPLE_RATE = 48000
     }
 
-    @Volatile
-    private var activeAudioTrack: AudioTrack? = null
     private val repository = MetronomeRepository
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -58,7 +58,11 @@ class MetronomeService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
     private var audioThread: Thread? = null
-    private val engine = MetronomeEngine(SAMPLE_RATE)
+    private lateinit var engine: MetronomeEngine
+
+    // 64-bit unwrapper for playbackHeadPosition
+    private var lastRawHeadPos = 0L
+    private var headWrapCount = 0L
 
     // Pauses metronome if headphones are unplugged
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
@@ -71,11 +75,18 @@ class MetronomeService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    @OptIn(FlowPreview::class)
     override fun onCreate()
     {
         super.onCreate()
 
         audioManager = getSystemService(AudioManager::class.java)
+
+        SAMPLE_RATE = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+            ?.toIntOrNull() ?: 48000
+
+        engine = MetronomeEngine(SAMPLE_RATE)
+
         createNotificationChannel()
 
         if (repository.beats.value.isNotEmpty()) {
@@ -86,7 +97,7 @@ class MetronomeService : Service() {
 
         // Automatically update the notification when BPM is changed in the app
         serviceScope.launch {
-            repository.bpm.collect {
+            repository.bpm.debounce(200.milliseconds).collect {
                 if (repository.isRunning.value) {
                     updateNotification()
                 }
@@ -108,11 +119,34 @@ class MetronomeService : Service() {
         super.onDestroy()
     }
 
+    private fun resetPlaybackHeadTracking() {
+        lastRawHeadPos = 0L
+        headWrapCount = 0L
+    }
+    private fun resetMetronome(fullReset: Boolean = false)
+    {
+        engine.resetPhase(fullReset)
+        if (fullReset) {
+            resetPlaybackHeadTracking()
+        }
+        repository.updateCurrentBeat(engine.currentBeatInMeasure)
+    }
+
+    // Audio playback
+
+    private fun syncEngineWithRepository() {
+        val currentBeats = repository.beats.value
+
+        if (engine.beats != currentBeats) {
+            engine.setBeatsList(currentBeats)
+        }
+    }
+
     private fun stopAudioAndCleanup() {
         unregisterNoisyReceiver()
         stopAudioPlayback()
         abandonAudioFocus()
-        resetMetronome()
+        resetMetronome(fullReset = true)
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -124,9 +158,10 @@ class MetronomeService : Service() {
             ACTION_TOGGLE_METRONOME -> if (repository.isRunning.value) handleStop() else handleStart()
             ACTION_SET_SUBDIVISION -> {
                 val value = intent.getIntExtra(EXTRA_VALUE, 1)
-                if (engine.setSubdivision(value)) {
+                if (engine.setSubdivision(value))
+                {
                     repository.updateBeatMeasure(engine.beats)
-                    resetMetronome()
+                    resetMetronome(fullReset = !repository.isRunning.value)
                 }
             }
             ACTION_TOGGLE_BEAT -> {
@@ -145,7 +180,10 @@ class MetronomeService : Service() {
 
     private fun handleStart()
     {
-        if (!requestAudioFocus()) return
+        if (!requestAudioFocus()) {
+            stopSelf()
+            return
+        }
 
         registerNoisyReceiver()
 
@@ -166,31 +204,18 @@ class MetronomeService : Service() {
         stopSelf()
     }
 
-    private fun resetMetronome() {
-        engine.resetPhase()
-        repository.updateCurrentBeat(engine.currentBeatInMeasure)
-    }
-
-    // Audio playback
-
-    private fun syncEngineWithRepository() {
-        val currentBeats = repository.beats.value
-
-        if (engine.beats != currentBeats) {
-            engine.setBeatsList(currentBeats)
-        }
-    }
-
     @Synchronized
     private fun startAudioPlayback()
     {
         if (repository.isRunning.value || audioThread?.isAlive == true) return
 
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "PracticeTracker:MetronomeWakeLock"
         ).apply {
+            setReferenceCounted(false)
             acquire(WAKELOCK_TIMEOUT_MS) // Protect starting immediately
         }
 
@@ -217,14 +242,6 @@ class MetronomeService : Service() {
         }
 
         repository.setRunning(false)
-
-        activeAudioTrack?.let { track ->
-            try {
-                track.pause()
-                track.flush()
-            } catch (_: IllegalStateException) {
-            }
-        }
 
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
@@ -254,9 +271,10 @@ class MetronomeService : Service() {
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
             )
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
@@ -268,31 +286,43 @@ class MetronomeService : Service() {
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
 
-        activeAudioTrack = audioTrack
-
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
-        resetMetronome()
+        resetMetronome(fullReset = true)
 
         try {
+            // Pre-fill the initial chunk so the hardware has data ready
+            engine.fillNextChunk(buffer, repository.bpm.value)
+            audioTrack.write(buffer, 0, chunkSize)
+
             audioTrack.play()
 
             while (repository.isRunning.value && !Thread.currentThread().isInterrupted)
             {
                 engine.fillNextChunk(buffer, repository.bpm.value)
 
-                val result = audioTrack.write(
-                    buffer, 0, chunkSize
-                )
-
+                val result = audioTrack.write(buffer, 0, chunkSize)
                 if (result < 0) {
                     Handler(Looper.getMainLooper()).post { handleStop() }
                     break // Audio route died (e.g. bluetooth disconnected)
                 }
 
-                if (repository.currentBeatInMeasure.value != engine.currentBeatInMeasure) {
-                    repository.updateCurrentBeat(engine.currentBeatInMeasure)
+                val currentPlayedSample = getContinuousPlaybackSamples(audioTrack)
+                var latestPlayedBeat: Int? = null
+
+                // Drain all beats whose audio has already exited the DAC
+                while (engine.beatQueue.peek()?.let {
+                    it.samplePosition <= currentPlayedSample } == true)
+                {
+                    latestPlayedBeat = engine.beatQueue.poll()?.beatIndex
+                }
+
+                // Update UI only when the beat has physically arrived at the speaker
+                latestPlayedBeat?.let { beatIndex ->
+                    if (repository.currentBeatInMeasure.value != beatIndex) {
+                        repository.updateCurrentBeat(beatIndex)
+                    }
                 }
 
                 val now = System.currentTimeMillis()
@@ -322,9 +352,18 @@ class MetronomeService : Service() {
                 }
             }
 
-            activeAudioTrack = null
             repository.setRunning(false)
         }
+    }
+
+    // Handles 32-bit unsigned overflow (occurs after ~24.8 hours of continuous playback at 48kHz)
+    private fun getContinuousPlaybackSamples(track: AudioTrack): Long {
+        val rawPos = track.playbackHeadPosition.toLong() and 0xFFFFFFFFL
+        if (rawPos < lastRawHeadPos) {
+            headWrapCount++
+        }
+        lastRawHeadPos = rawPos
+        return (headWrapCount shl 32) or rawPos
     }
 
     // Audio Focus Handling
@@ -384,7 +423,7 @@ class MetronomeService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Metronome Playback",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = "Metronome service controls"
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -430,7 +469,7 @@ class MetronomeService : Service() {
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setRequestPromotedOngoing(true)

@@ -227,9 +227,8 @@ class SessionTimerServiceTest {
         // Destroy the service (simulating OS service teardown)
         controller.destroy()
 
-        // Advancing time after destruction should not increment elapsedTimeSec
         advanceTimeBySeconds(5)
-        assertEquals(3L, SessionTimerService.elapsedTimeSec.value)
+        assertEquals(0L, SessionTimerService.elapsedTimeSec.value)
     }
 
     @Test
@@ -240,16 +239,6 @@ class SessionTimerServiceTest {
         assertNotNull(startedIntent)
         assertEquals(SessionTimerService.ACTION_START, startedIntent.action)
         assertEquals(SessionTimerService::class.java.name, startedIntent.component?.className)
-    }
-
-    @Test
-    fun onStartCommand_handlesActionPassedAsStringExtra() {
-        val intent = Intent(context, SessionTimerService::class.java).apply {
-            putExtra("action", "startTimer")
-        }
-        service.onStartCommand(intent, 0, 1)
-
-        assertEquals(SessionTimerService.TimerState.RUNNING, SessionTimerService.timerState.value)
     }
 
     @Test

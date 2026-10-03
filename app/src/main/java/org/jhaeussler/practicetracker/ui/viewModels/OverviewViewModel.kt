@@ -74,6 +74,10 @@ class OverviewViewModel (
         toggleTimer()
     }
 
+    fun sessionNotificationGranted() {
+        SessionTimerService.notificationGranted(getApplication())
+    }
+
     fun toggleTimer() {
         when (timerState.value) {
             SessionTimerService.TimerState.RUNNING -> SessionTimerService.pauseTimer(getApplication())
