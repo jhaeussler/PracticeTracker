@@ -79,7 +79,7 @@ fun OverviewScreen(
             else {
                 Toast.makeText(
                     context,
-                    "Permission denied. Timer cannot run.",
+                    "Permission denied. Notifications will not be available.",
                     Toast.LENGTH_SHORT
                 ).show()
             }

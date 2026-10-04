@@ -439,7 +439,7 @@ class MetronomeService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Metronome Playback",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             description = "Metronome service controls"
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -485,7 +485,7 @@ class MetronomeService : Service() {
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(
