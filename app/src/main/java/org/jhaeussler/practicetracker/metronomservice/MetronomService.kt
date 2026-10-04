@@ -47,6 +47,7 @@ class MetronomeService : Service() {
         const val ACTION_SET_SUBDIVISION = "org.jhaeussler.practicetracker.metronome.ACTION_SET_SUBDIVISION"
         const val ACTION_TOGGLE_BEAT = "org.jhaeussler.practicetracker.metronome.ACTION_TOGGLE_BEAT"
         const val EXTRA_VALUE = "org.jhaeussler.practicetracker.metronome.EXTRA_VALUE"
+        const val ACTION_NOTIFICATION_GRANTED = "org.jhaeussler.practicetracker.metronome.ACTION_NOTIFICATION_GRANTED"
 
         // private
         private const val CHANNEL_ID = "metronome_channel"
@@ -160,12 +161,16 @@ class MetronomeService : Service() {
             ACTION_START_METRONOME -> handleStart()
             ACTION_STOP_METRONOME -> handleStop()
             ACTION_TOGGLE_METRONOME -> if (repository.isRunning.value) handleStop() else handleStart()
+            ACTION_NOTIFICATION_GRANTED -> handleNotificationPermissionGranted()
             ACTION_SET_SUBDIVISION -> {
                 val value = intent.getIntExtra(EXTRA_VALUE, 1)
                 if (engine.setSubdivision(value))
                 {
                     repository.updateBeatMeasure(engine.beats)
-                    resetMetronome(fullReset = !repository.isRunning.value)
+
+                    if (!repository.isRunning.value) {
+                        resetMetronome(fullReset = true)
+                    }
                 }
             }
             ACTION_TOGGLE_BEAT -> {
@@ -214,6 +219,12 @@ class MetronomeService : Service() {
     {
         stopAudioAndCleanup()
         stopSelf()
+    }
+
+    private fun handleNotificationPermissionGranted() {
+        if (repository.isRunning.value) {
+            updateNotification()
+        }
     }
 
     @Synchronized

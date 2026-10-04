@@ -81,7 +81,6 @@ class MetronomeEngine(
         if (newBeats.isEmpty() || newBeats.size > MAX_SUBDIVISIONS) return
 
         beats = newBeats
-        resetPhase(false)
     }
     @Synchronized
     fun setSubdivision(value : Int) : Boolean
@@ -89,7 +88,7 @@ class MetronomeEngine(
         if (value !in 1..MAX_SUBDIVISIONS) return false
 
         beats = createInitialBeats(value)
-        resetPhase(false)
+
         return true
     }
     @Synchronized
@@ -204,15 +203,19 @@ class MetronomeEngine(
     {
         val measures = beats.size
         if (measures > 0) {
-            currentBeatInMeasure = (currentBeatInMeasure + 1) % measures
+            currentBeatInMeasure =
+                if (currentBeatInMeasure + 1 >= measures) { 0 }
+                else { currentBeatInMeasure + 1 }
         }
 
         // subsample remainder preserved to guarantee zero drift over time
         sampleIndexInBeat -= samplesPerBeat
 
         beatQueue.add(
-            BeatEvent(samplePosition = totalSamplesGenerated,
-                beatIndex = currentBeatInMeasure)
+            BeatEvent(
+                samplePosition = totalSamplesGenerated,
+                beatIndex = currentBeatInMeasure
+            )
         )
     }
 }

@@ -62,18 +62,6 @@ class OverviewViewModel (
         _showCancelSessionDiag.value = false
     }
 
-    fun requestTimerService(requestPermission: (String) -> Unit)
-    {
-        if (ContextCompat.checkSelfPermission(
-                getApplication(), Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermission(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        toggleTimer()
-    }
-
     fun sessionNotificationGranted() {
         SessionTimerService.notificationGranted(getApplication())
     }

@@ -6,6 +6,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.jhaeussler.practicetracker.metronomservice.MetronomeService.Companion.ACTION_NOTIFICATION_GRANTED
 
 object MetronomeRepository
 {
@@ -53,18 +54,18 @@ object MetronomeRepository
         )
     }
 
+    fun notificationGranted(context: Context) {
+        if (!isRunning.value) return
+
+        sendCommandToMetronome(context, actionToSend = ACTION_NOTIFICATION_GRANTED)
+    }
+
     fun sendCommandToMetronome(context: Context, actionToSend: String, extraValue: Int? = null) {
         val intent = Intent(context, MetronomeService::class.java).apply {
             action = actionToSend
             extraValue?.let { putExtra(MetronomeService.EXTRA_VALUE, it) }
         }
 
-        if (actionToSend == MetronomeService.ACTION_START_METRONOME ||
-            actionToSend == MetronomeService.ACTION_TOGGLE_METRONOME) {
-            // Only trigger foreground service contract when starting audio playback
-            ContextCompat.startForegroundService(context, intent)
-        } else {
-            context.startService(intent)
-        }
+        context.startService(intent)
     }
 }

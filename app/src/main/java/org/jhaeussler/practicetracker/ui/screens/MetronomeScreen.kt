@@ -19,6 +19,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
+import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
+import org.jhaeussler.practicetracker.ui.components.LocalNotificationRequester
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.components.metronome.BpmControlSection
@@ -27,22 +29,22 @@ import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
 
 @Composable
 fun MetronomeScreen(
-    metronomeViewModel: MetronomeViewModel = viewModel(factory = AppViewModelProvider.Factory)
+    viewModel: MetronomeViewModel = viewModel(factory = AppViewModelProvider.Factory)
 ) {
     val context = LocalContext.current
 
-    val isRunning by metronomeViewModel.isMetronomeRunning.collectAsStateWithLifecycle()
-    val bpm by metronomeViewModel.bpm.collectAsStateWithLifecycle()
-    val beats = metronomeViewModel.beats.collectAsStateWithLifecycle()
-    val currentBeatInMeasure by metronomeViewModel.currentBeatInMeasure.collectAsStateWithLifecycle()
-
+    val isRunning by viewModel.isMetronomeRunning.collectAsStateWithLifecycle()
+    val bpm by viewModel.bpm.collectAsStateWithLifecycle()
+    val beats = viewModel.beats.collectAsStateWithLifecycle()
+    val currentBeatInMeasure by viewModel.currentBeatInMeasure.collectAsStateWithLifecycle()
+    val notificationRequester = LocalNotificationRequester.current
 
     ScreenContainer(
         title = R.string.metronome_screen_title
     ) {
         BpmControlSection(
             bpm = bpm,
-            onBpmChange = { metronomeViewModel.setBpm(it) }
+            onBpmChange = { viewModel.setBpm(it) }
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -56,7 +58,15 @@ fun MetronomeScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         PracticeAppButton(
-            onClick  = { metronomeViewModel.toggleMetronome(context) },
+            onClick  = {
+                if (!isRunning) {
+                    notificationRequester.checkAndRequest {
+                        viewModel.sessionNotificationGranted(context)
+                    }
+                }
+
+                viewModel.toggleMetronome(context)
+            },
             text = if (!isRunning) R.string.start else R.string.stop,
             fontSize = 27,
             modifier = Modifier.fillMaxWidth(0.7f).height(70.dp)
@@ -74,10 +84,10 @@ fun MetronomeScreen(
 
         SubdivisionSection(
             beats = beats.value,
-            onToggleBeat = { index ->  metronomeViewModel.toggleBeat(context, index) },
+            onToggleBeat = { index ->  viewModel.toggleBeat(context, index) },
             currentBeatInMeasure = currentBeatInMeasure,
-            decrementSubdivision = { metronomeViewModel.setSubdivisions(context, beats.value.size -1) },
-            addSubdivision = { metronomeViewModel.setSubdivisions(context, beats.value.size +1) }
+            decrementSubdivision = { viewModel.setSubdivisions(context, beats.value.size -1) },
+            addSubdivision = { viewModel.setSubdivisions(context, beats.value.size +1) }
         )
 
         Spacer(modifier = Modifier.height(20.dp))

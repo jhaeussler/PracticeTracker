@@ -7,6 +7,7 @@ package org.jhaeussler.practicetracker.ui
 
 import android.annotation.SuppressLint
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -17,6 +18,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navigation
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
+import org.jhaeussler.practicetracker.ui.components.LocalNotificationRequester
+import org.jhaeussler.practicetracker.ui.components.rememberNotificationPermissionRequester
 import org.jhaeussler.practicetracker.ui.screens.OverviewScreen
 import org.jhaeussler.practicetracker.ui.screens.EnterValueOnDateScreen
 import org.jhaeussler.practicetracker.ui.screens.datascreens.GeneralStatisticsScreen
@@ -111,28 +114,33 @@ fun NavGraphBuilder.statisticsGraph(navController: NavController) {
 @Composable
 fun PracticeAppNavHost(navController: NavHostController)
 {
-    NavHost(
-        navController = navController,
-        startDestination = AppDestination.OverviewScreen.name)
+    val notificationRequester = rememberNotificationPermissionRequester()
+
+    CompositionLocalProvider(LocalNotificationRequester provides notificationRequester)
     {
-        composable(route = AppDestination.OverviewScreen.name) {
-            OverviewScreen (
-                onAddTimeClicked = { navController.navigate(AppDestination.EnterTimeScreen.name) },
-                onToMetronomeScreenClicked = { navController.navigate(AppDestination.MetronomeScreen.name) },
-                onStatisticsBtnClicked = {
-                    navController.navigate(AppDestination.StatisticsRoute.name)
-                }
-            )
+        NavHost(
+            navController = navController,
+            startDestination = AppDestination.OverviewScreen.name)
+        {
+            composable(route = AppDestination.OverviewScreen.name) {
+                OverviewScreen (
+                    onAddTimeClicked = { navController.navigate(AppDestination.EnterTimeScreen.name) },
+                    onToMetronomeScreenClicked = { navController.navigate(AppDestination.MetronomeScreen.name) },
+                    onStatisticsBtnClicked = {
+                        navController.navigate(AppDestination.StatisticsRoute.name)
+                    }
+                )
+            }
+            composable(route = AppDestination.EnterTimeScreen.name) {
+                EnterValueOnDateScreen (
+                    navigateBack = { navController.navigateUp() },
+                )
+            }
+            composable(AppDestination.MetronomeScreen.name) { _->
+                MetronomeScreen(
+                )
+            }
+            statisticsGraph(navController)
         }
-        composable(route = AppDestination.EnterTimeScreen.name) {
-            EnterValueOnDateScreen (
-                navigateBack = { navController.navigateUp() },
-            )
-        }
-        composable(AppDestination.MetronomeScreen.name) { _->
-            MetronomeScreen(
-            )
-        }
-        statisticsGraph(navController)
     }
 }
