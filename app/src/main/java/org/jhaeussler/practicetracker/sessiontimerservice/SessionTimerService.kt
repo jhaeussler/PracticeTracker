@@ -112,9 +112,14 @@ class SessionTimerService : Service() {
         }
     }
 
+    private var isReceiverRegistered = false
     private val screenStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_ON && _timerState.value == TimerState.RUNNING) {
+        override fun onReceive(context: Context?, intent: Intent?)
+        {
+            if (intent?.action == Intent.ACTION_SCREEN_ON &&
+                _timerState.value == TimerState.RUNNING
+            ) {
+                _elapsedTimeSec.value = getCurrentElapsedMillis() / TIMER_TICK
                 updateNotification()
             }
         }
@@ -132,11 +137,16 @@ class SessionTimerService : Service() {
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        isReceiverRegistered = true
     }
 
     override fun onDestroy()
     {
-        unregisterReceiver(screenStateReceiver)
+        if (isReceiverRegistered) {
+            unregisterReceiver(screenStateReceiver)
+            isReceiverRegistered = false
+        }
+
         stopTimer()
 
         super.onDestroy()
@@ -231,9 +241,7 @@ class SessionTimerService : Service() {
         // Lock screen & tray action buttons
         if (isRunning)
         {
-            val elapsedRealtimeOffset = SystemClock.elapsedRealtime() - getCurrentElapsedMillis()
-            val baseSystemTime =
-                System.currentTimeMillis() - (SystemClock.elapsedRealtime() - elapsedRealtimeOffset)
+            val baseSystemTime = System.currentTimeMillis() - getCurrentElapsedMillis()
 
             // Native Chronometer: Ticks smoothly on lock screen without waking CPU
             builder.setUsesChronometer(true)
@@ -296,6 +304,7 @@ class SessionTimerService : Service() {
             _timerState.value = TimerState.PAUSED
             handler.removeCallbacks(timerRunnable)
             timePausedAtMillis = SystemClock.elapsedRealtime()
+            _elapsedTimeSec.value = getCurrentElapsedMillis() / TIMER_TICK
             updateNotification()
         }
     }

@@ -20,11 +20,15 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import androidx.core.app.NotificationCompat
 import android.os.PowerManager
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -189,11 +193,19 @@ class MetronomeService : Service() {
 
         val notification = createNotification()
 
-        startForeground(
+        val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        } else {
+            0
+        }
+
+        ServiceCompat.startForeground(
+            this,
             NOTIFICATION_ID,
             notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            serviceType
         )
+
 
         startAudioPlayback()
     }
@@ -256,6 +268,9 @@ class MetronomeService : Service() {
 
     private fun runAudioLoop()
     {
+        // Sets Linux thread priority to nice -19 (real-time audio priority)
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+
         var lastRefresh = System.currentTimeMillis()
 
         val minBufferSize = AudioTrack.getMinBufferSize(
@@ -399,10 +414,11 @@ class MetronomeService : Service() {
 
     private fun registerNoisyReceiver() {
         if (!isNoisyReceiverRegistered) {
-            registerReceiver(
+            ContextCompat.registerReceiver(
+                this,
                 becomingNoisyReceiver,
                 IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
-                RECEIVER_NOT_EXPORTED
+                ContextCompat.RECEIVER_NOT_EXPORTED
             )
             isNoisyReceiverRegistered = true
         }

@@ -38,6 +38,9 @@ class SessionTimerServiceTest {
     private lateinit var service: SessionTimerService
     private val context: Context = ApplicationProvider.getApplicationContext()
 
+    private var isDestroyed = false
+
+
     @Before
     fun setUp() {
         SystemClock.setCurrentTimeMillis(0L)
@@ -50,8 +53,9 @@ class SessionTimerServiceTest {
 
     @After
     fun tearDown() {
-        sendAction(SessionTimerService.ACTION_RESET)
-        controller.destroy()
+        if (!isDestroyed) {
+            controller.destroy()
+        }
     }
 
     private fun sendAction(action: String) {
@@ -226,6 +230,7 @@ class SessionTimerServiceTest {
 
         // Destroy the service (simulating OS service teardown)
         controller.destroy()
+        isDestroyed = true
 
         advanceTimeBySeconds(5)
         assertEquals(0L, SessionTimerService.elapsedTimeSec.value)
