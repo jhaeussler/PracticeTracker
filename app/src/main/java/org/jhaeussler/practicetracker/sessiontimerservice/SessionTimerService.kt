@@ -10,14 +10,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,7 +67,7 @@ class SessionTimerService : Service() {
 
             val intent = Intent(context,
                 SessionTimerService::class.java).apply { action = ACTION_START }
-            context.startForegroundService(intent)
+            context.startService(intent)
         }
 
         fun pauseTimer(context: Context) {
@@ -106,12 +112,41 @@ class SessionTimerService : Service() {
         }
     }
 
-    override fun onCreate() {
-        super.onCreate()
-        createNotificationChannel()
+    private var isReceiverRegistered = false
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?)
+        {
+            if (intent?.action == Intent.ACTION_SCREEN_ON &&
+                _timerState.value == TimerState.RUNNING
+            ) {
+                _elapsedTimeSec.value = getCurrentElapsedMillis() / TIMER_TICK
+                updateNotification()
+            }
+        }
     }
 
-    override fun onDestroy() {
+    override fun onCreate()
+    {
+        super.onCreate()
+        createNotificationChannel()
+
+        val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
+        ContextCompat.registerReceiver(
+            this,
+            screenStateReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        isReceiverRegistered = true
+    }
+
+    override fun onDestroy()
+    {
+        if (isReceiverRegistered) {
+            unregisterReceiver(screenStateReceiver)
+            isReceiverRegistered = false
+        }
+
         stopTimer()
 
         super.onDestroy()
@@ -206,8 +241,9 @@ class SessionTimerService : Service() {
         // Lock screen & tray action buttons
         if (isRunning)
         {
-            // Native Chronometer: Ticks smoothly on lock screen without waking CPU
             val baseSystemTime = System.currentTimeMillis() - getCurrentElapsedMillis()
+
+            // Native Chronometer: Ticks smoothly on lock screen without waking CPU
             builder.setUsesChronometer(true)
                 .setWhen(baseSystemTime)
                 .setShowWhen(true)
@@ -268,6 +304,7 @@ class SessionTimerService : Service() {
             _timerState.value = TimerState.PAUSED
             handler.removeCallbacks(timerRunnable)
             timePausedAtMillis = SystemClock.elapsedRealtime()
+            _elapsedTimeSec.value = getCurrentElapsedMillis() / TIMER_TICK
             updateNotification()
         }
     }
@@ -282,7 +319,7 @@ class SessionTimerService : Service() {
 
     private fun handleNotificationPermissionGranted() {
         if (_timerState.value != TimerState.STOPPED) {
-            startForegroundService()
+            updateNotification()
         }
     }
 
@@ -303,10 +340,18 @@ class SessionTimerService : Service() {
     }
 
     private fun startForegroundService() {
-        startForeground(
+        val notification = buildNotification().build()
+        val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            0 // Legacy fallback (no type required)
+        }
+
+        ServiceCompat.startForeground(
+            this,
             NOTIFICATION_ID,
-            buildNotification().build(),
-            FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            notification,
+            serviceType
         )
     }
 }
