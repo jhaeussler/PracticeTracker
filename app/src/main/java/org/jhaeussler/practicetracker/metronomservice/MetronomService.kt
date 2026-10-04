@@ -47,6 +47,7 @@ class MetronomeService : Service() {
         const val ACTION_SET_SUBDIVISION = "org.jhaeussler.practicetracker.metronome.ACTION_SET_SUBDIVISION"
         const val ACTION_TOGGLE_BEAT = "org.jhaeussler.practicetracker.metronome.ACTION_TOGGLE_BEAT"
         const val EXTRA_VALUE = "org.jhaeussler.practicetracker.metronome.EXTRA_VALUE"
+        const val ACTION_NOTIFICATION_GRANTED = "org.jhaeussler.practicetracker.metronome.ACTION_NOTIFICATION_GRANTED"
 
         // private
         private const val CHANNEL_ID = "metronome_channel"
@@ -127,12 +128,11 @@ class MetronomeService : Service() {
         lastRawHeadPos = 0L
         headWrapCount = 0L
     }
-    private fun resetMetronome(fullReset: Boolean = false)
+    private fun resetMetronome()
     {
-        engine.resetPhase(fullReset)
-        if (fullReset) {
-            resetPlaybackHeadTracking()
-        }
+        engine.resetPhase(true)
+        resetPlaybackHeadTracking()
+
         repository.updateCurrentBeat(engine.currentBeatInMeasure)
     }
 
@@ -150,7 +150,7 @@ class MetronomeService : Service() {
         unregisterNoisyReceiver()
         stopAudioPlayback()
         abandonAudioFocus()
-        resetMetronome(fullReset = true)
+        resetMetronome()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -160,12 +160,16 @@ class MetronomeService : Service() {
             ACTION_START_METRONOME -> handleStart()
             ACTION_STOP_METRONOME -> handleStop()
             ACTION_TOGGLE_METRONOME -> if (repository.isRunning.value) handleStop() else handleStart()
+            ACTION_NOTIFICATION_GRANTED -> handleNotificationPermissionGranted()
             ACTION_SET_SUBDIVISION -> {
                 val value = intent.getIntExtra(EXTRA_VALUE, 1)
                 if (engine.setSubdivision(value))
                 {
                     repository.updateBeatMeasure(engine.beats)
-                    resetMetronome(fullReset = !repository.isRunning.value)
+
+                    if (!repository.isRunning.value) {
+                        resetMetronome()
+                    }
                 }
             }
             ACTION_TOGGLE_BEAT -> {
@@ -214,6 +218,12 @@ class MetronomeService : Service() {
     {
         stopAudioAndCleanup()
         stopSelf()
+    }
+
+    private fun handleNotificationPermissionGranted() {
+        if (repository.isRunning.value) {
+            updateNotification()
+        }
     }
 
     @Synchronized
@@ -304,7 +314,7 @@ class MetronomeService : Service() {
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
-        resetMetronome(fullReset = true)
+        resetMetronome()
 
         try {
             // Pre-fill the initial chunk so the hardware has data ready
@@ -439,7 +449,7 @@ class MetronomeService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Metronome Playback",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             description = "Metronome service controls"
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -485,7 +495,7 @@ class MetronomeService : Service() {
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(

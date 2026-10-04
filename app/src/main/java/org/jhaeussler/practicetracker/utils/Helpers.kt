@@ -54,3 +54,7 @@ fun secondsToNiceString(seconds: Long) : String {
         }
     }
 }
+
+fun toStrWithoutTrailingZero(value: Double) : String {
+    return value.toString().removeSuffix(".0")
+}

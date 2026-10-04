@@ -42,9 +42,9 @@ class SessionTimerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
 
     companion object {
-        const val ACTION_START = "ACTION_START"
-        const val ACTION_PAUSE = "ACTION_PAUSE"
-        const val ACTION_RESET = "ACTION_RESET"
+        const val ACTION_START = "org.jhaeussler.practicetracker.sessiontimer.ACTION_START"
+        const val ACTION_PAUSE = "org.jhaeussler.practicetracker.sessiontimer.ACTION_PAUSE"
+        const val ACTION_RESET = "org.jhaeussler.practicetracker.sessiontimer.ACTION_RESET"
 
         const val ACTION_NOTIFICATION_GRANTED = "ACTION_NOTIFICATION_GRANTED"
 

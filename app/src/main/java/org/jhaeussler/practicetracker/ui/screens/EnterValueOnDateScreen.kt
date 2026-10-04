@@ -23,7 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
-import org.jhaeussler.practicetracker.ui.components.DateInputWithPicker
+import org.jhaeussler.practicetracker.ui.components.entervalueondate.DateInputWithPicker
 import org.jhaeussler.practicetracker.ui.components.NumberInputField
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer

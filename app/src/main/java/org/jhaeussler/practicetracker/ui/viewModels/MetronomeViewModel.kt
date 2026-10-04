@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import org.jhaeussler.practicetracker.metronomservice.Beat
 import org.jhaeussler.practicetracker.metronomservice.MetronomeRepository
 import org.jhaeussler.practicetracker.metronomservice.MetronomeService.Companion.ACTION_TOGGLE_METRONOME
+import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
 
 class MetronomeViewModel(
 ) : ViewModel() {
@@ -48,12 +49,8 @@ class MetronomeViewModel(
         metronomeRepository.sendCommandToMetronome(context, ACTION_TOGGLE_METRONOME)
     }
 
-    fun incrementBpm() {
-        metronomeRepository.setBpm(bpm.value + 1)
-    }
-
-    fun decrementBpm() {
-        metronomeRepository.setBpm(bpm.value - 1)
+    fun sessionNotificationGranted(context: Context) {
+        metronomeRepository.notificationGranted(context)
     }
 
     fun setBpm(value: Int) {

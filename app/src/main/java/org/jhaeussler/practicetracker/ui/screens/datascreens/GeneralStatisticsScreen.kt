@@ -25,6 +25,7 @@ import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsVie
 import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScrollableTable
+import org.jhaeussler.practicetracker.utils.toStrWithoutTrailingZero
 
 
 @Composable
@@ -55,17 +56,17 @@ fun GeneralStatisticsScreen(
                 visibleRowCount = 6,
                 data = listOf(
                     Pair(
-                        listOf("Total h", uiState.getAllHoursPlayed().toString() + " h"),
+                        listOf("Total h", toStrWithoutTrailingZero(uiState.getAllHoursPlayed()) + " h"),
                         navigateToAllTimeStatScreen
                     ),
                     Pair(
-                        listOf("Average h per Week", uiState.getAverageHoursPerWeek().toString() + " h"),
+                        listOf("Average h per Week", toStrWithoutTrailingZero(uiState.getAverageHoursPerWeek()) + " h"),
                         navigateToWeeklyStatScreen
                     ),
                     Pair(
                         listOf(
                             "h this Week (so far)",
-                            uiState.getHoursPlayedThisWeek().toString() + " h"
+                            toStrWithoutTrailingZero(uiState.getHoursPlayedThisWeek()) + " h"
                         ),
                         navigateToCurrentWeekStatScreen
                     ),

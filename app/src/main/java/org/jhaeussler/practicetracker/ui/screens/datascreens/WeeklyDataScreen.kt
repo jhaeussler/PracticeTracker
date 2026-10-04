@@ -22,6 +22,7 @@ import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.components.ScrollableTable
 import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.utils.toStrWithoutTrailingZero
 
 @Composable
 fun WeeklyDataScreen(
@@ -46,7 +47,7 @@ fun WeeklyDataScreen(
                 visibleRowCount = 6,
                 data = listOf(
                     Pair(
-                        listOf("h / Week (average)", uiState.getAverageHoursPerWeek().toString() + " h"),
+                        listOf("h / Week (average)", toStrWithoutTrailingZero(uiState.getAverageHoursPerWeek()) + " h"),
                         null
                     ),
                     Pair(
@@ -58,7 +59,7 @@ fun WeeklyDataScreen(
                     Pair(
                         listOf(
                             "h this Week",
-                            uiState.getHoursPlayedThisWeek().toString() + " h"
+                            toStrWithoutTrailingZero(uiState.getHoursPlayedThisWeek()) + " h"
                         ),
                         null
                     ),

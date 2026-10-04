@@ -22,6 +22,7 @@ import org.jhaeussler.practicetracker.R
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.components.ScrollableTable
 import org.jhaeussler.practicetracker.ui.viewModels.statisticsData.StatisticsViewModel
+import org.jhaeussler.practicetracker.utils.toStrWithoutTrailingZero
 
 @Composable
 fun AllTimeDataScreen(
@@ -46,18 +47,18 @@ fun AllTimeDataScreen(
                 visibleRowCount = 6,
                 data = listOf(
                     Pair(
-                        listOf("Total h", uiState.getAllHoursPlayed().toString() + " h"),
+                        listOf("Total h", toStrWithoutTrailingZero(uiState.getAllHoursPlayed()) + " h"),
                         null
                     ),
                     Pair(
                         listOf("Avrg. h/d",
-                            uiState.getAverageHoursPerDay().toString() + " h"
+                            toStrWithoutTrailingZero(uiState.getAverageHoursPerDay()) + " h"
                         ),
                         null
                     ),
                     Pair(
                         listOf("Avrg. h / Practice Day",
-                            uiState.getAverageHoursOnPlayDates().toString() + " h"
+                            toStrWithoutTrailingZero(uiState.getAverageHoursOnPlayDates()) + " h"
                         ),
                         null
                     ),
@@ -66,7 +67,7 @@ fun AllTimeDataScreen(
                         null
                     ),
                     Pair(
-                        listOf("Today", uiState.getPracticeHoursToday().toString() + " h"),
+                        listOf("Today", toStrWithoutTrailingZero(uiState.getPracticeHoursToday()) + " h"),
                         null
                     ),
                 )

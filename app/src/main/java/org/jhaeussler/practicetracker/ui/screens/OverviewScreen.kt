@@ -5,9 +5,6 @@
 
 package org.jhaeussler.practicetracker.ui.screens
 
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,12 +26,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
@@ -45,45 +42,31 @@ import org.jhaeussler.practicetracker.ui.viewModels.OverviewViewModel
 import org.jhaeussler.practicetracker.utils.secondsToNiceString
 import kotlinx.coroutines.launch
 import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
+import org.jhaeussler.practicetracker.ui.components.LocalNotificationRequester
 import kotlin.math.floor
 
 @Composable
 fun OverviewScreen(
-    timeViewModel: OverviewViewModel = viewModel(factory = AppViewModelProvider.Factory),
+    viewModel: OverviewViewModel = viewModel(factory = AppViewModelProvider.Factory),
     onStatisticsBtnClicked: () -> Unit,
     onAddTimeClicked: () -> Unit,
     onToMetronomeScreenClicked: () -> Unit,
 ) {
-    val timeUiState by timeViewModel.overviewUiState.collectAsState()
+    val timeUiState by viewModel.overviewUiState.collectAsState()
     val timeEntries: List<PracticeTime> = timeUiState
-    val totalHours: Double = if(timeEntries.isNotEmpty()) timeEntries.sumOf{ it.value } else 0.0
+    val totalHours: Double = timeEntries.sumOf { it.value }
 
-    val timerState by timeViewModel.timerState.collectAsState()
-    val currentPracticeTime by timeViewModel.elapsedTimeSec.collectAsState()
+    val timerState by viewModel.timerState.collectAsStateWithLifecycle()
+    val currentPracticeTime by viewModel.elapsedTimeSec.collectAsState()
 
-    val showCloseSessionDiag by timeViewModel.showConfirmSessionEndDiag.collectAsState()
-    val showSessionEndErrorDiag by timeViewModel.showSessionEndErrorDiag.collectAsState()
-    val showCancelSessionDiag by timeViewModel.showCancelSessionDiag.collectAsState()
+    val showCloseSessionDiag by viewModel.showConfirmSessionEndDiag.collectAsState()
+    val showSessionEndErrorDiag by viewModel.showSessionEndErrorDiag.collectAsState()
+    val showCancelSessionDiag by viewModel.showCancelSessionDiag.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val notificationRequester = LocalNotificationRequester.current
 
     val okBtnColor = Color(0.2f, 0.8f, 0.5f)
-
-    val requestPermissionLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) {
-                timeViewModel.sessionNotificationGranted()
-            }
-            else {
-                Toast.makeText(
-                    context,
-                    "Permission denied. Timer cannot run.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
 
     ScreenContainer(
         title = R.string.greeting
@@ -95,8 +78,12 @@ fun OverviewScreen(
         ) {
             PracticeAppButton(
                 onClick  = {
-                    timeViewModel.requestTimerService { permission ->
-                    requestPermissionLauncher.launch(permission) }
+                    if (timerState == SessionTimerService.TimerState.STOPPED) {
+                        notificationRequester.checkAndRequest {
+                            viewModel.sessionNotificationGranted()
+                        }
+                    }
+                    viewModel.toggleTimer()
                 },
                 text = when (timerState) {
                     SessionTimerService.TimerState.RUNNING -> R.string.practice_session_running
@@ -140,12 +127,12 @@ fun OverviewScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp)
             ) {
                 PracticeAppButton(
-                    onClick  = { timeViewModel.requestCancelSession() },
+                    onClick  = { viewModel.requestCancelSession() },
                     text = R.string.reset_session_btn_txt,
                     modifier = Modifier.weight(0.5f)
                 )
                 PracticeAppButton(
-                    onClick  = { timeViewModel.requestEndSession() },
+                    onClick  = { viewModel.requestEndSession() },
                     text = R.string.close_session_btn_text,
                     modifier = Modifier.weight(0.5f)
                 )
@@ -219,7 +206,7 @@ fun OverviewScreen(
     }
     when {
         showCloseSessionDiag -> {
-            val sessionTime: Double = timeViewModel.getSessionTime()
+            val sessionTime: Double = viewModel.getSessionTime()
 
             AlertDialog(
                 title = {
@@ -232,7 +219,7 @@ fun OverviewScreen(
                     )
                 },
                 onDismissRequest = {
-                    timeViewModel.resetDialogFlags()
+                    viewModel.resetDialogFlags()
                 },
                 confirmButton = {
                     TextButton(
@@ -240,9 +227,9 @@ fun OverviewScreen(
                             .copy(contentColor = okBtnColor),
                         onClick = {
                             coroutineScope.launch {
-                                timeViewModel.endSession()
+                                viewModel.endSession()
                             }
-                            timeViewModel.resetDialogFlags()
+                            viewModel.resetDialogFlags()
                         }
                     ) {
                         Text(stringResource(R.string.confirm_btn_txt))
@@ -253,7 +240,7 @@ fun OverviewScreen(
                         colors = ButtonDefaults.textButtonColors()
                             .copy(contentColor = Color.Red),
                         onClick = {
-                            timeViewModel.resetDialogFlags()
+                            viewModel.resetDialogFlags()
                         }
                     ) {
                         Text(stringResource(R.string.cancel_btn_txt))
@@ -273,13 +260,13 @@ fun OverviewScreen(
                     Text(text = stringResource(R.string.session_end_error_text))
                 },
                 onDismissRequest = {
-                    timeViewModel.resetDialogFlags()
+                    viewModel.resetDialogFlags()
                 },
                 confirmButton = {
                     TextButton(
                         colors = ButtonDefaults.textButtonColors()
                             .copy(contentColor = okBtnColor),
-                        onClick = { timeViewModel.resetDialogFlags() }
+                        onClick = { viewModel.resetDialogFlags() }
                     ) {
                         Text(stringResource(R.string.confirm_btn_txt))
                     }
@@ -298,15 +285,15 @@ fun OverviewScreen(
                     Text(text = stringResource(R.string.cancel_session_diag_text))
                 },
                 onDismissRequest = {
-                    timeViewModel.resetDialogFlags()
+                    viewModel.resetDialogFlags()
                 },
                 confirmButton = {
                     TextButton(
                         colors = ButtonDefaults.textButtonColors()
                             .copy(contentColor = okBtnColor),
                         onClick = {
-                            timeViewModel.resetTimer()
-                            timeViewModel.resetDialogFlags()
+                            viewModel.resetTimer()
+                            viewModel.resetDialogFlags()
                         }
                     ) {
                         Text(stringResource(R.string.confirm_btn_txt))
@@ -317,7 +304,7 @@ fun OverviewScreen(
                         colors = ButtonDefaults.textButtonColors()
                             .copy(contentColor = Color.Red),
                         onClick = {
-                            timeViewModel.resetDialogFlags()
+                            viewModel.resetDialogFlags()
                         }
                     ) {
                         Text(stringResource(R.string.cancel_btn_txt))
