@@ -472,7 +472,6 @@ class MetronomeService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setRequestPromotedOngoing(true)
             .addAction(
                 android.R.drawable.ic_media_pause,
                 "Stop",
