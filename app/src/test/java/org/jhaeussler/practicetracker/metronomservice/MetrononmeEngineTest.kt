@@ -354,10 +354,33 @@ class MetronomeEngineTest {
         assertEquals(2, engine.currentBeatInMeasure)
 
         engine.setSubdivision(2)
-        assertEquals(0, engine.currentBeatInMeasure)
+        assertEquals(1, engine.currentBeatInMeasure)
 
         engine.fillNextChunk(buffer, bpm)
-        assertEquals(1, engine.currentBeatInMeasure)
+        assertEquals(0, engine.currentBeatInMeasure)
+    }
+
+    @Test
+    fun `reducing subdivisions mid-measure keeps currentBeatInMeasure within bounds`() {
+        val bpm = 120
+        val oneBeatBuffer = ShortArray(TEST_SAMPLE_RATE / 2) // 24000 samples = 1 beat
+
+        // Advance to beat index 3 (measure: 0, 1, 2, 3)
+        repeat(3) {
+            engine.fillNextChunk(oneBeatBuffer, bpm)
+        }
+        assertEquals(3, engine.currentBeatInMeasure)
+
+        // Reduce subdivisions to 3 (valid indices: 0, 1, 2)
+        engine.setSubdivision(3)
+
+        assertTrue(engine.currentBeatInMeasure < engine.beats.size)
+        assertEquals(2, engine.currentBeatInMeasure)
+
+        // Next beat should advance from 2 -> 0 (new bar)
+        engine.fillNextChunk(oneBeatBuffer, bpm)
+        assertEquals(0, engine.currentBeatInMeasure)
+        assertEquals(0, engine.beatQueue.toList().last().beatIndex)
     }
 
     @Test
@@ -618,29 +641,29 @@ class MetronomeEngineTest {
     }
 
     @Test
-    fun `setting subdivisions or custom beats list clears and resets beatQueue`() {
+    fun `setting subdivisions or custom beats list does not clear and resets beatQueue`() {
         val bpm = 120
         val buffer = ShortArray(TEST_SAMPLE_RATE)
 
         // Accumulate some beats in the queue
         engine.fillNextChunk(buffer, bpm)
-        assertTrue(engine.beatQueue.size > 1)
 
-        // Changing subdivision internally invokes resetPhase()
+        assertEquals(3, engine.beatQueue.size)
+
         engine.setSubdivision(5)
 
-        assertEquals(1, engine.beatQueue.size)
-        val event = engine.beatQueue.peek()
+        // no change
+        assertEquals(3, engine.beatQueue.size)
+
+        val event = engine.beatQueue.toList().last()
         assertEquals(buffer.size.toLong(), event?.samplePosition)
-        assertEquals(0, event?.beatIndex)
+        assertEquals(2, event?.beatIndex)
 
-        // Setting beat list also resets queue
-        engine.fillNextChunk(buffer, bpm)
-        assertTrue(engine.beatQueue.size > 1)
-
+        // Setting beat list resets queue
         engine.setBeatsList(listOf(Beat(0), Beat(1)))
+
         assertEquals(1, engine.beatQueue.size)
-        assertEquals(buffer.size.toLong() * 2, engine.beatQueue.peek()?.samplePosition)
+        assertEquals(buffer.size.toLong(), engine.beatQueue.peek()?.samplePosition)
     }
 
     @Test

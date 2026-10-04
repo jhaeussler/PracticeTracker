@@ -74,6 +74,10 @@ class MetronomeEngine(
 
     val beatQueue = ConcurrentLinkedQueue<BeatEvent>()
 
+    init {
+        resetPhase()
+    }
+
     fun beatsPerMeasure() : Int = beats.size
 
     @Synchronized
@@ -81,7 +85,9 @@ class MetronomeEngine(
         if (newBeats.isEmpty() || newBeats.size > MAX_SUBDIVISIONS) return
 
         beats = newBeats
+        resetPhase()
     }
+
     @Synchronized
     fun setSubdivision(value : Int) : Boolean
     {
@@ -89,8 +95,13 @@ class MetronomeEngine(
 
         beats = createInitialBeats(value)
 
+        // make sure current beat stays in bound
+        currentBeatInMeasure =
+            currentBeatInMeasure.coerceAtMost(beats.lastIndex)
+
         return true
     }
+
     @Synchronized
     fun toggleBeatEnabled(index: Int) : Boolean
     {
@@ -103,6 +114,7 @@ class MetronomeEngine(
 
         return true
     }
+
     @Synchronized
     fun toggleBeatAccent(index: Int) : Boolean
     {

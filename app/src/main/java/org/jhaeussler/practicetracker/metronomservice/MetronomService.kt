@@ -128,12 +128,11 @@ class MetronomeService : Service() {
         lastRawHeadPos = 0L
         headWrapCount = 0L
     }
-    private fun resetMetronome(fullReset: Boolean = false)
+    private fun resetMetronome()
     {
-        engine.resetPhase(fullReset)
-        if (fullReset) {
-            resetPlaybackHeadTracking()
-        }
+        engine.resetPhase(true)
+        resetPlaybackHeadTracking()
+
         repository.updateCurrentBeat(engine.currentBeatInMeasure)
     }
 
@@ -151,7 +150,7 @@ class MetronomeService : Service() {
         unregisterNoisyReceiver()
         stopAudioPlayback()
         abandonAudioFocus()
-        resetMetronome(fullReset = true)
+        resetMetronome()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -169,7 +168,7 @@ class MetronomeService : Service() {
                     repository.updateBeatMeasure(engine.beats)
 
                     if (!repository.isRunning.value) {
-                        resetMetronome(fullReset = true)
+                        resetMetronome()
                     }
                 }
             }
@@ -315,7 +314,7 @@ class MetronomeService : Service() {
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
-        resetMetronome(fullReset = true)
+        resetMetronome()
 
         try {
             // Pre-fill the initial chunk so the hardware has data ready

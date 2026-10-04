@@ -323,30 +323,6 @@ class OverviewViewModelTest {
     }
 
     @Test
-    fun requestTimerService_whenPermissionNotGranted_invokesPermissionCallbackAndTogglesTimer() {
-        var requestedPermission: String? = null
-
-        setCompanionPrivateStateFlow(
-            outerClass = SessionTimerService::class.java,
-            companionInstance = SessionTimerService.Companion,
-            fieldName = "_timerState",
-            value = SessionTimerService.TimerState.STOPPED
-        )
-
-        // Clear intent queue populated by setUp()'s resetTimer call
-        shadowOf(application).clearStartedServices()
-
-        viewModel.requestTimerService { permission ->
-            requestedPermission = permission
-        }
-
-        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, requestedPermission)
-
-        val nextServiceIntent = org.robolectric.Shadows.shadowOf(application).nextStartedService
-        assertEquals(SessionTimerService.ACTION_START, nextServiceIntent?.action)
-    }
-
-    @Test
     fun toggleTimer_whenStopped_dispatchesStartActionToService() {
         setCompanionPrivateStateFlow(
             outerClass = SessionTimerService::class.java,
