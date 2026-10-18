@@ -5,15 +5,12 @@
 
 package org.jhaeussler.practicetracker.ui.viewModels
 
-import android.Manifest
 import android.app.Application
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
-import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
+import org.jhaeussler.practicetracker.sessiontimer.SessionTimerService
 import org.jhaeussler.practicetracker.utils.HoursAndMins
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

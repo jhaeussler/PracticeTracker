@@ -3,8 +3,9 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.metronomservice
+package org.jhaeussler.practicetracker.drummachine.service
 
+import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -36,36 +37,52 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
+import org.jhaeussler.practicetracker.drummachine.engine.PlaybackEvent
+import org.jhaeussler.practicetracker.drummachine.engine.TimelineAudioEngine
+import org.jhaeussler.practicetracker.drummachine.session.AppDrumMachineSession
+import org.jhaeussler.practicetracker.drummachine.sound.SoundBank
 import kotlin.concurrent.thread
 import kotlin.time.Duration.Companion.milliseconds
 
-class MetronomeService : Service() {
+class DrumMachineService : Service() {
     companion object {
-        const val ACTION_START_METRONOME = "org.jhaeussler.practicetracker.metronome.ACTION_START"
-        const val ACTION_STOP_METRONOME = "org.jhaeussler.practicetracker.metronome.ACTION_STOP"
-        const val ACTION_TOGGLE_METRONOME = "org.jhaeussler.practicetracker.metronome.ACTION_TOGGLE"
-        const val ACTION_SET_SUBDIVISION = "org.jhaeussler.practicetracker.metronome.ACTION_SET_SUBDIVISION"
-        const val ACTION_TOGGLE_BEAT = "org.jhaeussler.practicetracker.metronome.ACTION_TOGGLE_BEAT"
-        const val EXTRA_VALUE = "org.jhaeussler.practicetracker.metronome.EXTRA_VALUE"
-        const val ACTION_NOTIFICATION_GRANTED = "org.jhaeussler.practicetracker.metronome.ACTION_NOTIFICATION_GRANTED"
+        const val ACTION_START = "org.jhaeussler.practicetracker.drummachine.ACTION_START"
+        const val ACTION_STOP = "org.jhaeussler.practicetracker.drummachine.ACTION_STOP"
+        const val ACTION_TOGGLE = "org.jhaeussler.practicetracker.drummachine.ACTION_TOGGLE"
+        const val ACTION_NOTIFICATION_GRANTED = "org.jhaeussler.practicetracker.drummachine.ACTION_NOTIFICATION_GRANTED"
 
-        // private
-        private const val CHANNEL_ID = "metronome_channel"
+        private const val CHANNEL_ID = "drum_machine_playback_channel"
         private const val NOTIFICATION_ID = 420
         private const val WAKELOCK_TIMEOUT_MS = 5 * 60 * 1000L // 5 minutes
         private var SAMPLE_RATE = 48000
+
+        fun start(context: Context) {
+            val intent = Intent(context, DrumMachineService::class.java).apply { action = ACTION_START }
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun stop(context: Context) {
+            val intent = Intent(context, DrumMachineService::class.java).apply { action = ACTION_STOP }
+            context.startService(intent)
+        }
+
+        fun toggle(context: Context) {
+            val intent = Intent(context, DrumMachineService::class.java).apply { action = ACTION_TOGGLE }
+            ContextCompat.startForegroundService(context, intent)
+        }
     }
 
-    private val repository = MetronomeRepository
+    private val session = AppDrumMachineSession
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
     private var isNoisyReceiverRegistered = false
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var wakeLock: PowerManager.WakeLock? = null
     private var audioThread: Thread? = null
-    private lateinit var engine: MetronomeEngine
 
-    // 64-bit unwrapper for playbackHeadPosition
+    private lateinit var engine: TimelineAudioEngine
+
+    // 64-bit unwrapper for playbackHeadPosition to prevent 24.8-hour overflow
     private var lastRawHeadPos = 0L
     private var headWrapCount = 0L
 
@@ -86,24 +103,26 @@ class MetronomeService : Service() {
         super.onCreate()
 
         audioManager = getSystemService(AudioManager::class.java)
-
         SAMPLE_RATE = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
             ?.toIntOrNull() ?: 48000
 
-        engine = MetronomeEngine(SAMPLE_RATE)
+        engine = TimelineAudioEngine(sampleRate = SAMPLE_RATE)
+        engine.setSoundBank(SoundBank.createDefault(SAMPLE_RATE))
+        engine.setPattern(session.activePattern.value)
 
         createNotificationChannel()
 
-        if (repository.beats.value.isNotEmpty()) {
-            engine.setBeatsList(repository.beats.value)
-        } else {
-            repository.updateBeatMeasure(engine.beats)
+        // 1. Reactive Pattern Latching: Automatically stage pattern changes at beat boundaries
+        serviceScope.launch {
+            session.activePattern.collect { pattern ->
+                engine.setPattern(pattern)
+            }
         }
 
-        // Automatically update the notification when BPM is changed in the app
+        // 2. Dynamic Notification Updates when BPM changes
         serviceScope.launch {
-            repository.bpm.debounce(200.milliseconds).collect {
-                if (repository.isRunning.value) {
+            session.bpm.debounce(200.milliseconds).collect {
+                if (session.isRunning.value) {
                     updateNotification()
                 }
             }
@@ -124,67 +143,17 @@ class MetronomeService : Service() {
         super.onDestroy()
     }
 
-    private fun resetPlaybackHeadTracking() {
-        lastRawHeadPos = 0L
-        headWrapCount = 0L
-    }
-    private fun resetMetronome()
-    {
-        engine.resetPhase(true)
-        resetPlaybackHeadTracking()
-
-        repository.updateCurrentBeat(engine.currentBeatInMeasure)
-    }
-
-    // Audio playback
-
-    private fun syncEngineWithRepository() {
-        val currentBeats = repository.beats.value
-
-        if (engine.beats != currentBeats) {
-            engine.setBeatsList(currentBeats)
-        }
-    }
-
-    private fun stopAudioAndCleanup() {
-        unregisterNoisyReceiver()
-        stopAudioPlayback()
-        abandonAudioFocus()
-        resetMetronome()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int
-    {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START_METRONOME -> handleStart()
-            ACTION_STOP_METRONOME -> handleStop()
-            ACTION_TOGGLE_METRONOME -> if (repository.isRunning.value) handleStop() else handleStart()
+            ACTION_START -> handleStart()
+            ACTION_STOP -> handleStop()
+            ACTION_TOGGLE -> if (session.isRunning.value) handleStop() else handleStart()
             ACTION_NOTIFICATION_GRANTED -> handleNotificationPermissionGranted()
-            ACTION_SET_SUBDIVISION -> {
-                val value = intent.getIntExtra(EXTRA_VALUE, 1)
-                if (engine.setSubdivision(value))
-                {
-                    repository.updateBeatMeasure(engine.beats)
-
-                    if (!repository.isRunning.value) {
-                        resetMetronome()
-                    }
-                }
-            }
-            ACTION_TOGGLE_BEAT -> {
-                val index = intent.getIntExtra(EXTRA_VALUE, -1)
-                if (index != -1) {
-                    if (engine.toggleBeatEnabled(index)) {
-                        repository.updateBeatMeasure(engine.beats)
-                    }
-                }
-            }
-            else -> if (!repository.isRunning.value) stopSelf()
+            else -> if (!session.isRunning.value) stopSelf()
         }
-
         return START_NOT_STICKY
     }
+
 
     private fun handleStart()
     {
@@ -210,7 +179,6 @@ class MetronomeService : Service() {
             serviceType
         )
 
-
         startAudioPlayback()
     }
 
@@ -221,7 +189,7 @@ class MetronomeService : Service() {
     }
 
     private fun handleNotificationPermissionGranted() {
-        if (repository.isRunning.value) {
+        if (session.isRunning.value) {
             updateNotification()
         }
     }
@@ -229,25 +197,24 @@ class MetronomeService : Service() {
     @Synchronized
     private fun startAudioPlayback()
     {
-        if (repository.isRunning.value || audioThread?.isAlive == true) return
+        if (session.isRunning.value || audioThread?.isAlive == true) return
 
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
 
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
-            "PracticeTracker:MetronomeWakeLock"
+            "PracticeTracker:DrumMachineWakeLock"
         ).apply {
             setReferenceCounted(false)
-            acquire(WAKELOCK_TIMEOUT_MS) // Protect starting immediately
+            acquire(WAKELOCK_TIMEOUT_MS)
         }
 
-        syncEngineWithRepository()
-        repository.setRunning(true)
+        session.setRunning(true)
 
         audioThread = thread(
             start = true,
             priority = Thread.MAX_PRIORITY,
-            name = "MetronomeAudioThread"
+            name = "RhythmAudioThread"
         ) {
             runAudioLoop()
         }
@@ -256,18 +223,17 @@ class MetronomeService : Service() {
     @Synchronized
     private fun stopAudioPlayback()
     {
-        if (!repository.isRunning.value &&
+        if (!session.isRunning.value &&
             wakeLock == null &&
             audioThread == null
-        ) {
-            return
-        }
+        ) return
 
-        repository.setRunning(false)
+        session.setRunning(false)
 
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
+
         wakeLock = null
 
         audioThread?.interrupt()
@@ -275,6 +241,20 @@ class MetronomeService : Service() {
         audioThread = null
     }
 
+    private fun resetPlaybackHeadTracking() {
+        lastRawHeadPos = 0L
+        headWrapCount = 0L
+    }
+
+    private fun stopAudioAndCleanup() {
+        unregisterNoisyReceiver()
+        stopAudioPlayback()
+        abandonAudioFocus()
+        engine.resetPhase(resetTotalSamples = true)
+        resetPlaybackHeadTracking()
+        session.updatePlaybackEvent(null)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
 
     private fun runAudioLoop()
     {
@@ -314,18 +294,19 @@ class MetronomeService : Service() {
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
-        resetMetronome()
+        engine.resetPhase(resetTotalSamples = true)
+        resetPlaybackHeadTracking()
 
         try {
             // Pre-fill the initial chunk so the hardware has data ready
-            engine.fillNextChunk(buffer, repository.bpm.value)
+            engine.fillNextChunk(buffer, session.bpm.value)
             audioTrack.write(buffer, 0, chunkSize)
 
             audioTrack.play()
 
-            while (repository.isRunning.value && !Thread.currentThread().isInterrupted)
+            while (session.isRunning.value && !Thread.currentThread().isInterrupted)
             {
-                engine.fillNextChunk(buffer, repository.bpm.value)
+                engine.fillNextChunk(buffer, session.bpm.value)
 
                 val result = audioTrack.write(buffer, 0, chunkSize)
                 if (result < 0) {
@@ -333,21 +314,20 @@ class MetronomeService : Service() {
                     break // Audio route died (e.g. bluetooth disconnected)
                 }
 
+                // Synchronize visual state with physical DAC output
                 val currentPlayedSample = getContinuousPlaybackSamples(audioTrack)
-                var latestPlayedBeat: Int? = null
+                var latestPlayedEvent: PlaybackEvent? = null
 
                 // Drain all beats whose audio has already exited the DAC
-                while (engine.beatQueue.peek()?.let {
+                while (engine.playbackQueue.peek()?.let {
                     it.samplePosition <= currentPlayedSample } == true)
                 {
-                    latestPlayedBeat = engine.beatQueue.poll()?.beatIndex
+                    latestPlayedEvent = engine.playbackQueue.poll()
                 }
 
                 // Update UI only when the beat has physically arrived at the speaker
-                latestPlayedBeat?.let { beatIndex ->
-                    if (repository.currentBeatInMeasure.value != beatIndex) {
-                        repository.updateCurrentBeat(beatIndex)
-                    }
+                latestPlayedEvent?.let { event ->
+                    session.updatePlaybackEvent(event)
                 }
 
                 val now = System.currentTimeMillis()
@@ -377,12 +357,13 @@ class MetronomeService : Service() {
                 }
             }
 
-            repository.setRunning(false)
+            session.setRunning(false)
         }
     }
 
     // Handles 32-bit unsigned overflow (occurs after ~24.8 hours of continuous playback at 48kHz)
-    private fun getContinuousPlaybackSamples(track: AudioTrack): Long {
+    private fun getContinuousPlaybackSamples(track: AudioTrack): Long
+    {
         val rawPos = track.playbackHeadPosition.toLong() and 0xFFFFFFFFL
         if (rawPos < lastRawHeadPos) {
             headWrapCount++
@@ -465,7 +446,8 @@ class MetronomeService : Service() {
         notificationManager.notify(NOTIFICATION_ID, createNotification())
     }
 
-    private fun createNotification(): Notification {
+    private fun createNotification(): Notification
+    {
         // PendingIntent to launch main activity when tapping the notification body
         val contentIntent =
             packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
@@ -477,8 +459,8 @@ class MetronomeService : Service() {
                 )
             }
 
-        val stopIntent = Intent(this, MetronomeService::class.java).apply {
-            action = ACTION_STOP_METRONOME
+        val stopIntent = Intent(this, DrumMachineService::class.java).apply {
+            action = ACTION_STOP
         }
 
         val stopPendingIntent = PendingIntent.getService(
@@ -490,8 +472,8 @@ class MetronomeService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Metronome")
-            .setContentText("${repository.bpm.value} BPM")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentText("${session.bpm.value} BPM")
+            .setSmallIcon(R.drawable.ic_dialog_info)
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -499,7 +481,7 @@ class MetronomeService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(
-                android.R.drawable.ic_media_pause,
+                R.drawable.ic_media_pause,
                 "Stop",
                 stopPendingIntent
             )

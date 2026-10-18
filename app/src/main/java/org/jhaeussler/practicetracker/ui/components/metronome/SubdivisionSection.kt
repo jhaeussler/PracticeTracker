@@ -15,9 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import org.jhaeussler.practicetracker.metronomservice.Beat
 import org.jhaeussler.practicetracker.ui.components.RoundButtonWithIcon
 
+/*
 @Composable
 fun SubdivisionSection(
     beats: List<Beat>,
@@ -115,3 +115,5 @@ fun ChangeSubdivisionRow(
         )
     }
 }
+
+ */

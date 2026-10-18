@@ -41,7 +41,7 @@
         </activity>
 
         <service
-            android:name="org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService"
+            android:name="org.jhaeussler.practicetracker.sessiontimer.SessionTimerService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse">
@@ -51,7 +51,7 @@
         </service>
 
         <service
-            android:name="org.jhaeussler.practicetracker.metronomservice.MetronomeService"
+            android:name="org.jhaeussler.practicetracker.drummachine.service.DrumMachineService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
