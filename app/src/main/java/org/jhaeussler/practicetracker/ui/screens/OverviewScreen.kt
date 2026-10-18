@@ -41,7 +41,7 @@ import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.viewModels.OverviewViewModel
 import org.jhaeussler.practicetracker.utils.secondsToNiceString
 import kotlinx.coroutines.launch
-import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
+import org.jhaeussler.practicetracker.sessiontimer.SessionTimerService
 import org.jhaeussler.practicetracker.ui.components.LocalNotificationRequester
 import kotlin.math.floor
 

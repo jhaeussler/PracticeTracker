@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.sessiontimerservice
+package org.jhaeussler.practicetracker.sessiontimer
 
 import android.content.Context
 import android.content.Intent

@@ -19,12 +19,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.jhaeussler.practicetracker.AppViewModelProvider
 import org.jhaeussler.practicetracker.R
-import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
 import org.jhaeussler.practicetracker.ui.components.LocalNotificationRequester
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.ScreenContainer
 import org.jhaeussler.practicetracker.ui.components.metronome.BpmControlSection
-import org.jhaeussler.practicetracker.ui.components.metronome.SubdivisionSection
 import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
 
 @Composable
@@ -35,8 +33,6 @@ fun MetronomeScreen(
 
     val isRunning by viewModel.isMetronomeRunning.collectAsStateWithLifecycle()
     val bpm by viewModel.bpm.collectAsStateWithLifecycle()
-    val beats = viewModel.beats.collectAsStateWithLifecycle()
-    val currentBeatInMeasure by viewModel.currentBeatInMeasure.collectAsStateWithLifecycle()
     val notificationRequester = LocalNotificationRequester.current
 
     ScreenContainer(
@@ -61,7 +57,7 @@ fun MetronomeScreen(
             onClick  = {
                 if (!isRunning) {
                     notificationRequester.checkAndRequest {
-                        viewModel.sessionNotificationGranted(context)
+                        //viewModel.sessionNotificationGranted(context)
                     }
                 }
 
@@ -82,13 +78,13 @@ fun MetronomeScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        SubdivisionSection(
-            beats = beats.value,
-            onToggleBeat = { index ->  viewModel.toggleBeat(context, index) },
-            currentBeatInMeasure = currentBeatInMeasure,
-            decrementSubdivision = { viewModel.setSubdivisions(context, beats.value.size -1) },
-            addSubdivision = { viewModel.setSubdivisions(context, beats.value.size +1) }
-        )
+        //SubdivisionSection(
+        //    beats = beats.value,
+        //    onToggleBeat = { index ->  viewModel.toggleBeat(context, index) },
+        //    currentBeatInMeasure = currentBeatInMeasure,
+        //    decrementSubdivision = { viewModel.setSubdivisions(context, beats.value.size -1) },
+        //    addSubdivision = { viewModel.setSubdivisions(context, beats.value.size +1) }
+        //)
 
         Spacer(modifier = Modifier.height(20.dp))
 

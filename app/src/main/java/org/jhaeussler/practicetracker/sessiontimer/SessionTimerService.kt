@@ -3,7 +3,7 @@
  * Copyright (c) 2026 J. Häußler
  */
 
-package org.jhaeussler.practicetracker.sessiontimerservice
+package org.jhaeussler.practicetracker.sessiontimer
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,7 +15,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder

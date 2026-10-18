@@ -1,8 +1,9 @@
-package org.jhaeussler.practicetracker.audioengine
+package org.jhaeussler.practicetracker.drummachine.engine
 
+import org.jhaeussler.practicetracker.drummachine.sound.SoundBank
+import java.util.Arrays
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.roundToLong
 
 /**
  * High-performance, cyclic timeline audio engine.
@@ -33,15 +34,6 @@ class TimelineAudioEngine(
     private var activePattern: TimelinePattern = TimelinePattern(4, emptyList())
 
     private val pendingPattern = AtomicReference<TimelinePattern?>(null)
-
-    // Beat Segment Tracking
-    private class BeatAnchor(
-        val startRatio: Double,
-        val endRatio: Double
-    )
-
-    private var beatAnchors: Array<BeatAnchor> = emptyArray()
-
     private var currentBeatIndex: Int = -1
     private var sampleIndexInCurrentBeat: Int = 0
     private var currentBeatDurationSamples: Int = 0
@@ -73,8 +65,10 @@ class TimelineAudioEngine(
             val available = buf.size - readPosition
             val toRender = minOf(count, available)
 
-            for (i in 0 until toRender) {
+            var i = 0
+            while (i < toRender) {
                 accum[offset + i] += (buf[readPosition + i] * gain).toInt()
+                i++
             }
 
             readPosition += toRender
@@ -84,9 +78,9 @@ class TimelineAudioEngine(
         }
     }
 
-    init {
-        updateBeatAnchors()
-    }
+    // Diagnostic contract accessors for verification
+    internal fun getActivePattern(): TimelinePattern = activePattern
+    internal fun getCurrentBeatIndex(): Int = currentBeatIndex
 
     /**
      * Updates the active soundbank.
@@ -105,18 +99,18 @@ class TimelineAudioEngine(
 
     /**
      * Stages a new timeline pattern.
-     * The pattern will latch seamlessly once the currently playing beat completes.
+     * Only mutates immediately if playback has NOT yet started.
+     * Once running, it ALWAYS stages via pendingPattern to guarantee lock-free latching.
      */
     fun setPattern(newPattern: TimelinePattern)
     {
-        if (activePattern.events.isEmpty() ||
-            totalSamplesGenerated == 0L ||
+        if (totalSamplesGenerated == 0L ||
             currentBeatIndex == -1
         ) {
             activePattern = newPattern
-            updateBeatAnchors()
             pendingPattern.set(null)
-        } else {
+        }
+        else {
             pendingPattern.set(newPattern)
         }
     }
@@ -144,10 +138,12 @@ class TimelineAudioEngine(
             activePattern = pending
         }
 
-        updateBeatAnchors()
+        val poolSize = voicePool.size
+        var i = 0
 
-        for (i in voicePool.indices) {
+        while (i < poolSize) {
             voicePool[i].reset()
+            i++
         }
     }
 
@@ -162,36 +158,44 @@ class TimelineAudioEngine(
      */
     fun fillNextChunk(buffer: ShortArray, bpm: Int)
     {
-        if (buffer.isEmpty()) return
-
-        val safeBpm = bpm.coerceAtLeast(1)
         val chunkSize = buffer.size
+        if (chunkSize == 0) return
+
+        val safeBpm = if (bpm < 1) 1 else bpm
 
         if (mixBuffer.size < chunkSize) {
             mixBuffer = IntArray(chunkSize)
         }
-        mixBuffer.fill(0, 0, chunkSize)
+        Arrays.fill(mixBuffer, 0, chunkSize, 0)
 
         var bufferOffset = 0
 
         while (bufferOffset < chunkSize) {
-            // Check if we need to advance to the next beat segment
             if (currentBeatDurationSamples == 0 || sampleIndexInCurrentBeat >= currentBeatDurationSamples) {
                 advanceToNextBeat(safeBpm)
             }
 
+            if (currentBeatDurationSamples <= 0) currentBeatDurationSamples = chunkSize
+
             val samplesRemainingInBeat = currentBeatDurationSamples - sampleIndexInCurrentBeat
-            val sliceLength = minOf(chunkSize - bufferOffset, samplesRemainingInBeat)
+            val needed = chunkSize - bufferOffset
+            val sliceLength = if (needed < samplesRemainingInBeat) needed else samplesRemainingInBeat
 
             // 1. Render in-flight voices from previous slices FIRST
-            for (i in 0 until voicePool.size) {
-                val voice = voicePool[i]
+            val poolSize = voicePool.size
+            var vIdx = 0
+
+            while (vIdx < poolSize)
+            {
+                val voice = voicePool[vIdx]
+
                 if (voice.isActive) {
                     voice.mixInto(mixBuffer, bufferOffset, sliceLength)
                 }
+                vIdx++
             }
 
-            // 2. Trigger new events scheduled in this slice SECOND (Zero-allocation index loop)
+            // 2. Trigger new events scheduled in this slice SECOND
             triggerEventsInSlice(
                 sliceStartInBeat = sampleIndexInCurrentBeat,
                 sliceLength = sliceLength,
@@ -204,118 +208,83 @@ class TimelineAudioEngine(
         }
 
         // Clamp 32-bit mix accumulation into 16-bit PCM output buffer
-        for (i in 0 until chunkSize)
+        var cIdx = 0
+        while (cIdx < chunkSize)
         {
-            val sample = mixBuffer[i]
+            val sample = mixBuffer[cIdx]
 
-            buffer[i] = when {
-                sample > Short.MAX_VALUE -> Short.MAX_VALUE
-                sample < Short.MIN_VALUE -> Short.MIN_VALUE
-                else -> sample.toShort()
+            buffer[cIdx] = if (sample > 32767) {
+                32767
             }
+            else if (sample < -32768) {
+                -32768
+            }
+            else {
+                sample.toShort()
+            }
+
+            cIdx++
         }
     }
 
     private fun advanceToNextBeat(safeBpm: Int)
     {
-        if (beatAnchors.isEmpty()) {
-            updateBeatAnchors()
-            if (beatAnchors.isEmpty()) return
-        }
+        var anchors = activePattern.beatAnchors
+        val anchorCount = anchors.size
+        if (anchorCount == 0) return
 
-        if (currentBeatIndex == -1) {
+        if (currentBeatIndex == -1)
+        {
             // Start of playback: Begin at Beat 0
             currentBeatIndex = 0
             beatStartSampleDouble = totalSamplesGenerated.toDouble()
         }
         else {
-            val isLastBeatOfMeasure = currentBeatIndex + 1 >= beatAnchors.size
+            val isLastBeatOfMeasure = currentBeatIndex + 1 >= anchorCount
 
             if (isLastBeatOfMeasure)
             {
-                // Tier 2 Latching Checkpoint: Downbeat / Cycle Wrap Boundary
-                // Latch ANY pending pattern (including time signature / meter changes)
+                // Tier 2: Downbeat Wrap Boundary (Any meter change accepted)
                 val pending = pendingPattern.getAndSet(null)
-
                 if (pending != null) {
                     activePattern = pending
-                    updateBeatAnchors()
+                    anchors = pending.beatAnchors
                 }
                 currentBeatIndex = 0
             }
             else {
-                // Tier 1 Latching Checkpoint: Beat Boundary
-                // Latch pending pattern ONLY if nominalBeats matches (same meter)
+                // Tier 1: Beat Boundary (Same nominalBeats only, race-safe CAS)
                 val pending = pendingPattern.get()
-
-                if (pending != null && pending.nominalBeats == activePattern.nominalBeats) {
-                    activePattern = pendingPattern.getAndSet(null)!!
-                    updateBeatAnchors()
+                if (pending != null && pending.nominalBeats == activePattern.nominalBeats)
+                {
+                    if (pendingPattern.compareAndSet(pending, null)) {
+                        activePattern = pending
+                        anchors = pending.beatAnchors
+                    }
                 }
                 currentBeatIndex++
             }
         }
 
-        val anchor = beatAnchors[currentBeatIndex]
-        val deltaBeats = (anchor.endRatio - anchor.startRatio) * activePattern.nominalBeats.coerceAtLeast(1)
+        val maxAnchorIndex = anchors.size - 1
+        val safeBeatIndex = if (currentBeatIndex < 0) 0 else if (currentBeatIndex > maxAnchorIndex) maxAnchorIndex else currentBeatIndex
+        val anchor = anchors[safeBeatIndex]
+
+        val rawNominal = activePattern.nominalBeats
+        val safeNominal = if (rawNominal < 1) 1 else rawNominal
+
+        val deltaBeats = (anchor.endRatio - anchor.startRatio) * safeNominal
         val exactBeatDuration = deltaBeats * (sampleRate.toDouble() * 60.0) / safeBpm
 
         val nextBeatStartDouble = beatStartSampleDouble + exactBeatDuration
-        val currentStartInt = beatStartSampleDouble.roundToLong()
-        val nextStartInt = nextBeatStartDouble.roundToLong()
+        val currentStartInt = Math.round(beatStartSampleDouble)
+        val nextStartInt = Math.round(nextBeatStartDouble)
 
-        currentBeatDurationSamples = (nextStartInt - currentStartInt).toInt().coerceAtLeast(1)
+        val durationDiff = (nextStartInt - currentStartInt).toInt()
+        currentBeatDurationSamples = if (durationDiff < 1) 1 else durationDiff
+
         beatStartSampleDouble = nextBeatStartDouble
         sampleIndexInCurrentBeat = 0
-    }
-
-    private fun updateBeatAnchors()
-    {
-        val events = activePattern.events
-
-        if (events.isEmpty()) {
-            beatAnchors = emptyArray()
-            return
-        }
-
-        val primaryRatios = ArrayList<Double>()
-
-        for (i in events.indices)
-        {
-            val event = events[i]
-
-            if (event.metadata.isPrimaryBeat)
-            {
-                if (primaryRatios.isEmpty() ||
-                    event.positionRatio > primaryRatios[primaryRatios.size - 1] + 0.00001
-                ) {
-                    primaryRatios.add(event.positionRatio)
-                }
-            }
-        }
-
-        if (primaryRatios.isEmpty()) {
-            beatAnchors = arrayOf(BeatAnchor(0.0, 1.0))
-            return
-        }
-
-        if (primaryRatios[0] > 0.00001) {
-            primaryRatios.add(0, 0.0)
-        }
-
-        val anchors = Array(primaryRatios.size) { i ->
-
-            val startRatio = primaryRatios[i]
-
-            val endRatio = if (i + 1 < primaryRatios.size) {
-                primaryRatios[i + 1]
-            } else {
-                1.0
-            }
-
-            BeatAnchor(startRatio, endRatio)
-        }
-        beatAnchors = anchors
     }
 
     private fun triggerEventsInSlice(
@@ -323,28 +292,37 @@ class TimelineAudioEngine(
         sliceLength: Int,
         chunkBufferOffset: Int
     ) {
-        if (beatAnchors.isEmpty()) return
+        val pattern = activePattern
+        val anchors = pattern.beatAnchors
+        val anchorCount = anchors.size
 
-        val anchor = beatAnchors[currentBeatIndex]
+        if (anchorCount == 0 || currentBeatIndex < 0 || currentBeatIndex >= anchorCount) return
+
+        val anchor = anchors[currentBeatIndex]
         val segmentSpan = anchor.endRatio - anchor.startRatio
-
         if (segmentSpan <= 0.0) return
 
-        val sliceEndInBeat = sliceStartInBeat + sliceLength
-        val events = activePattern.events
+        val events = pattern.events
+        val eventCount = events.size
+        if (eventCount == 0) return
 
-        for (i in events.indices)
+        val sliceEndInBeat = sliceStartInBeat + sliceLength
+
+        var eIdx = 0
+        while (eIdx < eventCount)
         {
-            val event = events[i]
+            val event = events[eIdx]
             val eventRatio = event.positionRatio
 
             // Check if event belongs to this beat segment
             if (eventRatio >= anchor.startRatio && eventRatio < anchor.endRatio)
             {
                 val alpha = (eventRatio - anchor.startRatio) / segmentSpan
-                val eventOffsetInBeat = (alpha * currentBeatDurationSamples).roundToLong().toInt()
+                val calculatedOffset = Math.round(alpha * currentBeatDurationSamples).toInt()
+                val maxOffset = currentBeatDurationSamples - 1
+                val eventOffsetInBeat = if (calculatedOffset > maxOffset) maxOffset else if (calculatedOffset < 0) 0 else calculatedOffset
 
-                if (eventOffsetInBeat in sliceStartInBeat until sliceEndInBeat)
+                if (eventOffsetInBeat >= sliceStartInBeat && eventOffsetInBeat < sliceEndInBeat)
                 {
                     val delayInSlice = eventOffsetInBeat - sliceStartInBeat
                     val triggerOffsetInChunk = chunkBufferOffset + delayInSlice
@@ -354,7 +332,6 @@ class TimelineAudioEngine(
                     if (sampleData != null && event.gain > 0f)
                     {
                         val voice = allocateVoice()
-
                         voice.samples = sampleData
                         voice.readPosition = 0
                         voice.gain = event.gain
@@ -368,32 +345,42 @@ class TimelineAudioEngine(
                     }
 
                     val globalSamplePos = totalSamplesGenerated + delayInSlice
-
-                    playbackQueue.add(
-                        PlaybackEvent(globalSamplePos, event.metadata)
-                    )
+                    playbackQueue.add(PlaybackEvent(globalSamplePos, event.metadata))
                 }
             }
+            eIdx++
         }
     }
 
     private fun allocateVoice(): Voice
     {
-        for (i in voicePool.indices) {
+        val poolSize = voicePool.size
+
+        var i = 0
+        while (i < poolSize)
+        {
             val v = voicePool[i]
+
             if (!v.isActive) return v
+
+            i++
         }
 
         var maxPos = -1
         var chosen = voicePool[0]
 
-        for (i in voicePool.indices)
+        i = 0
+
+        while (i < poolSize)
         {
             val v = voicePool[i]
+
             if (v.readPosition > maxPos) {
                 maxPos = v.readPosition
                 chosen = v
             }
+
+            i++
         }
 
         chosen.reset()

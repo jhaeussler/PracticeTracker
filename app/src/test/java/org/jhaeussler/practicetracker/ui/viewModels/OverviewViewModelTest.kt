@@ -24,10 +24,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.jhaeussler.practicetracker.datastorage.PracticeTime
 import org.jhaeussler.practicetracker.datastorage.PracticeTimeRepository
-import org.jhaeussler.practicetracker.sessiontimerservice.SessionTimerService
+import org.jhaeussler.practicetracker.sessiontimer.SessionTimerService
 import org.junit.After
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
