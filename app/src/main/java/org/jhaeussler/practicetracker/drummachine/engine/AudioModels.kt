@@ -12,11 +12,31 @@ enum class SoundId {
 }
 
 data class EventMetadata(
+    val trackIndex: Int = 0,     // 0 = Primary, 1 = Counter / Secondary
     val beatIndex: Int,
     val subIndex: Int = 0,
     val isPrimaryBeat: Boolean = true,
     val isDownbeat: Boolean = false
 )
+
+class MutableEventMetadata(
+    var trackIndex: Int = 0,     // 0 = Primary, 1 = Counter / Secondary
+    var beatIndex: Int = 0,
+    var subIndex: Int = 0,
+    var isPrimaryBeat: Boolean = false,
+    var isDownbeat: Boolean = false)
+{
+    fun toEventMetadata() : EventMetadata {
+        return EventMetadata(
+            trackIndex,
+            beatIndex,
+            subIndex,
+            isPrimaryBeat,
+            isDownbeat
+        )
+    }
+}
+
 
 data class PlaybackEvent(
     val samplePosition: Long,    // Continuous 64-bit hardware playback sample

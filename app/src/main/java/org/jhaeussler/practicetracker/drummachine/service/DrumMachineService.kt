@@ -37,6 +37,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
+import org.jhaeussler.practicetracker.drummachine.engine.MutableEventMetadata
 import org.jhaeussler.practicetracker.drummachine.engine.PlaybackEvent
 import org.jhaeussler.practicetracker.drummachine.engine.TimelineAudioEngine
 import org.jhaeussler.practicetracker.drummachine.session.AppDrumMachineSession
@@ -241,7 +242,7 @@ class DrumMachineService : Service() {
         audioThread = null
     }
 
-    private fun resetPlaybackHeadTracking() {
+    internal fun resetPlaybackHeadTracking() {
         lastRawHeadPos = 0L
         headWrapCount = 0L
     }
@@ -294,6 +295,8 @@ class DrumMachineService : Service() {
         val chunkSize = 512
         val buffer = ShortArray(chunkSize)
 
+        val scratchMeta = MutableEventMetadata()
+
         engine.resetPhase(resetTotalSamples = true)
         resetPlaybackHeadTracking()
 
@@ -304,8 +307,9 @@ class DrumMachineService : Service() {
 
             audioTrack.play()
 
-            while (session.isRunning.value && !Thread.currentThread().isInterrupted)
-            {
+            while (session.isRunning.value &&
+                !Thread.currentThread().isInterrupted
+            ) {
                 engine.fillNextChunk(buffer, session.bpm.value)
 
                 val result = audioTrack.write(buffer, 0, chunkSize)
@@ -314,20 +318,18 @@ class DrumMachineService : Service() {
                     break // Audio route died (e.g. bluetooth disconnected)
                 }
 
-                // Synchronize visual state with physical DAC output
+                // Continuous hardware sample position
                 val currentPlayedSample = getContinuousPlaybackSamples(audioTrack)
-                var latestPlayedEvent: PlaybackEvent? = null
 
-                // Drain all beats whose audio has already exited the DAC
-                while (engine.playbackQueue.peek()?.let {
-                    it.samplePosition <= currentPlayedSample } == true)
-                {
-                    latestPlayedEvent = engine.playbackQueue.poll()
-                }
-
-                // Update UI only when the beat has physically arrived at the speaker
-                latestPlayedEvent?.let { event ->
-                    session.updatePlaybackEvent(event)
+                // Drain all events whose audio has physically exited the DAC
+                engine.playbackRingBuffer.
+                drainReadyEvents(currentPlayedSample, scratchMeta) { eventPos, meta ->
+                    session.updatePlaybackEvent(
+                        PlaybackEvent(
+                            samplePosition = eventPos,
+                            metadata = meta.toEventMetadata()
+                        )
+                    )
                 }
 
                 val now = System.currentTimeMillis()
@@ -346,15 +348,11 @@ class DrumMachineService : Service() {
                     audioTrack.stop()
                 }
             }
-            catch (e: IllegalStateException) {
-                //
-            }
+            catch (_: IllegalStateException) { }
             finally {
                 try {
                     audioTrack.release()
-                } catch (e: Exception) {
-                    //
-                }
+                } catch (_: Exception) { }
             }
 
             session.setRunning(false)
@@ -362,15 +360,23 @@ class DrumMachineService : Service() {
     }
 
     // Handles 32-bit unsigned overflow (occurs after ~24.8 hours of continuous playback at 48kHz)
-    private fun getContinuousPlaybackSamples(track: AudioTrack): Long
+    internal fun getContinuousPlaybackSamples(rawHeadPos: Long): Long
     {
-        val rawPos = track.playbackHeadPosition.toLong() and 0xFFFFFFFFL
-        if (rawPos < lastRawHeadPos) {
+        val uHeadPos = rawHeadPos and 0xFFFFFFFFL
+
+        // Guard: Only increment if last position was near 0xFFFFFFFF and new is near 0
+        if (lastRawHeadPos > 0xE0000000L &&
+            uHeadPos < 0x20000000L
+        ) {
             headWrapCount++
         }
-        lastRawHeadPos = rawPos
-        return (headWrapCount shl 32) or rawPos
+
+        lastRawHeadPos = uHeadPos
+        return (headWrapCount shl 32) or uHeadPos
     }
+
+    internal fun getContinuousPlaybackSamples(track: AudioTrack): Long =
+        getContinuousPlaybackSamples(track.playbackHeadPosition.toLong())
 
     // Audio Focus Handling
 

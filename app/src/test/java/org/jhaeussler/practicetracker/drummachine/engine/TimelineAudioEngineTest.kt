@@ -40,25 +40,25 @@ class TimelineAudioEngineTest {
                     0.00,
                     SoundId.CLICK_ACCENT,
                     1.0f,
-                    EventMetadata(0, 0, isPrimaryBeat = true, isDownbeat = true)
+                    EventMetadata(0, 0, 0, isPrimaryBeat = true, isDownbeat = true)
                 ),
                 TimelineEvent(
                     0.25,
                     SoundId.CLICK_BEAT,
                     1.0f,
-                    EventMetadata(1, 0, isPrimaryBeat = true, isDownbeat = false)
+                    EventMetadata(0, 1, 0, isPrimaryBeat = true, isDownbeat = false)
                 ),
                 TimelineEvent(
                     0.50,
                     SoundId.CLICK_BEAT,
                     1.0f,
-                    EventMetadata(2, 0, isPrimaryBeat = true, isDownbeat = false)
+                    EventMetadata(0, 2, 0, isPrimaryBeat = true, isDownbeat = false)
                 ),
                 TimelineEvent(
                     0.75,
                     SoundId.CLICK_BEAT,
                     1.0f,
-                    EventMetadata(3, 0, isPrimaryBeat = true, isDownbeat = false)
+                    EventMetadata(0, 3, 0, isPrimaryBeat = true, isDownbeat = false)
                 )
             )
         )
@@ -78,6 +78,28 @@ class TimelineAudioEngineTest {
         engine = TimelineAudioEngine(sampleRate = TEST_SAMPLE_RATE, maxVoices = 16)
         engine.setSoundBank(defaultSoundBank)
         engine.setPattern(create4_4Pattern())
+    }
+
+    private fun TimelineAudioEngine.drainPlaybackEvents(): List<PlaybackEvent> {
+        val events = mutableListOf<PlaybackEvent>()
+        val scratchMeta = MutableEventMetadata()
+        while (!playbackRingBuffer.isEmpty()) {
+            val pos = playbackRingBuffer.poll(scratchMeta)
+            if (pos != PlaybackRingBuffer.NO_EVENT) {
+                events.add(
+                    PlaybackEvent(
+                        samplePosition = pos,
+                        metadata = EventMetadata(
+                            beatIndex = scratchMeta.beatIndex,
+                            subIndex = scratchMeta.subIndex,
+                            isPrimaryBeat = scratchMeta.isPrimaryBeat,
+                            isDownbeat = scratchMeta.isDownbeat
+                        )
+                    )
+                )
+            }
+        }
+        return events
     }
 
     // =========================================================================
@@ -412,10 +434,7 @@ class TimelineAudioEngineTest {
         val buffer = ShortArray(samplesPerBeat.toInt() * 3)
         engine.fillNextChunk(buffer, TEST_BPM)
 
-        val events = mutableListOf<PlaybackEvent>()
-        while (!engine.playbackQueue.isEmpty()) {
-            events.add(engine.playbackQueue.poll()!!)
-        }
+        val events = engine.drainPlaybackEvents()
 
         assertEquals(3, events.size)
         assertEquals(0L, events[0].samplePosition)
@@ -767,6 +786,125 @@ class TimelineAudioEngineTest {
             "Rendered sample count must match exact physical sample expectations (zero drift)",
             expectedSamples,
             engine.totalSamplesGenerated
+        )
+    }
+
+    @Test
+    fun testPendingPatternLatchesImmediatelyOnBeat0AfterReset() {
+        // 1. Warm up the engine so totalSamplesGenerated > 0 (engine has run)
+        val warmupBuffer = ShortArray(100)
+        engine.fillNextChunk(warmupBuffer, TEST_BPM)
+        assertTrue("Total samples generated must be > 0", engine.totalSamplesGenerated > 0)
+
+        // 2. Reset phase without resetting sample clock (sets currentBeatIndex = -1)
+        engine.resetPhase(resetTotalSamples = false)
+        assertEquals(-1, engine.getCurrentBeatIndex())
+
+        // 3. Stage a distinct 3/4 pattern whose downbeat uses DRUM_KICK (loudSampleA)
+        //    instead of the default 4/4 CLICK_ACCENT (accentSample)
+        val pattern3_4 = TimelinePattern(
+            nominalBeats = 3,
+            events = listOf(
+                TimelineEvent(
+                    positionRatio = 0.0,
+                    soundId = SoundId.DRUM_KICK,
+                    gain = 1.0f,
+                    metadata = EventMetadata(beatIndex = 0, subIndex = 0, isPrimaryBeat = true, isDownbeat = true)
+                )
+            )
+        )
+        engine.setPattern(pattern3_4)
+
+        // 4. Render Beat 0
+        val renderBuffer = ShortArray(100)
+        engine.fillNextChunk(renderBuffer, TEST_BPM)
+
+        // Verify pattern state
+        assertEquals("Pattern must latch to pattern3_4 immediately at Beat 0", pattern3_4, engine.getActivePattern())
+        assertEquals(0, engine.getCurrentBeatIndex())
+
+        // Verify rendered audio: must start with loudSampleA[0] (DRUM_KICK = 25000), NOT accentSample[0] (CLICK_ACCENT = 12100)
+        assertEquals(
+            "First rendered sample must match the new pattern's downbeat sound",
+            loudSampleA[0],
+            renderBuffer[0]
+        )
+    }
+
+    @Test
+    fun testVoiceStealingPrioritizesFewestRemainingSamples() {
+        // 1. Create engine constrained to 2 voices to force allocation contention
+        val smallEngine = TimelineAudioEngine(sampleRate = TEST_SAMPLE_RATE, maxVoices = 2)
+
+        val soundLong = ShortArray(1000) { 10000.toShort() }  // Sound A: Value 10000
+        val soundMedium = ShortArray(300) { 1000.toShort() }   // Sound B: Value 1000
+        val soundNew = ShortArray(100) { 500.toShort() }       // Sound C: Value 500
+
+        smallEngine.setSoundBank(
+            SoundBank(
+                mapOf(
+                    SoundId.DRUM_KICK to soundLong,
+                    SoundId.DRUM_SNARE to soundMedium,
+                    SoundId.DRUM_CLAP to soundNew
+                )
+            )
+        )
+
+        // 1 measure at 120 BPM in 4/4 meter = 96,000 samples.
+        // - Sample 0: Trigger Sound A (DRUM_KICK)
+        // - Sample 100: Trigger Sound B (DRUM_SNARE) and Sound C (DRUM_CLAP)
+        val testPattern = TimelinePattern(
+            nominalBeats = 4,
+            events = listOf(
+                TimelineEvent(
+                    positionRatio = 0.0,
+                    soundId = SoundId.DRUM_KICK,
+                    gain = 1.0f,
+                    metadata = EventMetadata(0, 0, isPrimaryBeat = true, isDownbeat = true)
+                ),
+                TimelineEvent(
+                    positionRatio = 100.0 / 96000.0,
+                    soundId = SoundId.DRUM_SNARE,
+                    gain = 1.0f,
+                    metadata = EventMetadata(0, 1, isPrimaryBeat = false, isDownbeat = false)
+                ),
+                TimelineEvent(
+                    positionRatio = 100.0 / 96000.0,
+                    soundId = SoundId.DRUM_CLAP,
+                    gain = 1.0f,
+                    metadata = EventMetadata(0, 2, isPrimaryBeat = false, isDownbeat = false)
+                )
+            )
+        )
+        smallEngine.setPattern(testPattern)
+
+        // Chunk 1: Samples 0..99
+        // Sound A begins on Voice 0. At end of chunk: readPosition = 100, remaining = 900.
+        val chunk1 = ShortArray(100)
+        smallEngine.fillNextChunk(chunk1, TEST_BPM)
+
+        // Chunk 2: Samples 100..199
+        // - Voice 0 in-flight mixes 100 samples -> readPosition = 200, remaining = 800.
+        // - Sound B triggers -> allocated to Voice 1, mixes 100 samples -> readPosition = 100, remaining = 200.
+        // - Sound C triggers -> both voices are active!
+        //   * Voice 0: readPosition = 200, remaining = 800
+        //   * Voice 1: readPosition = 100, remaining = 200
+        //   Fix 2 steals Voice 1 (200 < 800).
+        val chunk2 = ShortArray(100)
+        smallEngine.fillNextChunk(chunk2, TEST_BPM)
+
+        // Chunk 3: Samples 200..299
+        // If Voice 1 (Sound B) was stolen:
+        // - Voice 0 (Sound A, 10000) is still alive and rendering.
+        // If Voice 0 (Sound A) was stolen (old bug):
+        // - Voice 0 was reset to Sound C (which finished in Chunk 2), and Voice 1 (Sound B, 1000) is playing.
+        val chunk3 = ShortArray(100)
+        smallEngine.fillNextChunk(chunk3, TEST_BPM)
+
+        assertEquals(
+            "Voice 0 (Sound A = 10000) should have been preserved over Voice 1 (Sound B)",
+            10000.toShort(),
+            chunk3[0]
         )
     }
 }
