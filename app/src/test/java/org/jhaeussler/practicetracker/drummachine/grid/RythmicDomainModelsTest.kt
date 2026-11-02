@@ -107,4 +107,30 @@ class RhythmicDomainModelsTest {
         )
         assertEquals(12, polymeter4_6.cycleNominalBeats)
     }
+
+    @Test
+    fun meterTrack_cycleBeatState_cyclesThroughAllThreeStates() {
+        val track = MeterTrack(beatCount = 4, accentedBeats = emptySet(), mutedBeats = emptySet())
+
+        // Initial state: NORMAL
+        assertEquals(BeatState.NORMAL, track.getBeatState(1))
+
+        // 1st cycle: NORMAL -> ACCENTED
+        val accented = track.cycleBeatState(1)
+        assertEquals(BeatState.ACCENTED, accented.getBeatState(1))
+        assertTrue(accented.isAccented(1))
+        assertFalse(accented.isMuted(1))
+
+        // 2nd cycle: ACCENTED -> MUTED
+        val muted = accented.cycleBeatState(1)
+        assertEquals(BeatState.MUTED, muted.getBeatState(1))
+        assertFalse(muted.isAccented(1))
+        assertTrue(muted.isMuted(1))
+
+        // 3rd cycle: MUTED -> NORMAL
+        val normal = muted.cycleBeatState(1)
+        assertEquals(BeatState.NORMAL, normal.getBeatState(1))
+        assertFalse(normal.isAccented(1))
+        assertFalse(normal.isMuted(1))
+    }
 }

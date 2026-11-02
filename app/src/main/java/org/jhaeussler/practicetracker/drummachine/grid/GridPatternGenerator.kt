@@ -128,8 +128,10 @@ object GridPatternGenerator {
         events.sortWith(compareBy<TimelineEvent> { it.positionRatio }
             .thenBy { !it.metadata.isPrimaryBeat })
 
+        val nominalQuarterBeats = macroBeats * primary.beatUnit.quarterMultiplier
+
         return TimelinePattern(
-            nominalBeats = macroBeats,
+            nominalBeats = nominalQuarterBeats,
             events = events
         )
     }

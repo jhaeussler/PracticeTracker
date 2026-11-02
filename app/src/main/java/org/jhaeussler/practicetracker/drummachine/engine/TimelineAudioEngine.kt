@@ -2,7 +2,6 @@ package org.jhaeussler.practicetracker.drummachine.engine
 
 import org.jhaeussler.practicetracker.drummachine.sound.SoundBank
 import java.util.Arrays
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -25,13 +24,13 @@ class TimelineAudioEngine(
     /**
      * Lock-free queue delivering sample-accurate trigger events to the UI consumer.
      */
-    val playbackQueue = ConcurrentLinkedQueue<PlaybackEvent>()
+    val playbackRingBuffer = PlaybackRingBuffer(capacity = 512)
 
     @Volatile
     private var soundBank: SoundBank = SoundBank()
 
     @Volatile
-    private var activePattern: TimelinePattern = TimelinePattern(4, emptyList())
+    private var activePattern: TimelinePattern = TimelinePattern(4.0, emptyList())
 
     private val pendingPattern = AtomicReference<TimelinePattern?>(null)
     private var currentBeatIndex: Int = -1
@@ -104,9 +103,7 @@ class TimelineAudioEngine(
      */
     fun setPattern(newPattern: TimelinePattern)
     {
-        if (totalSamplesGenerated == 0L ||
-            currentBeatIndex == -1
-        ) {
+        if (totalSamplesGenerated == 0L) {
             activePattern = newPattern
             pendingPattern.set(null)
         }
@@ -124,7 +121,7 @@ class TimelineAudioEngine(
     {
         if (resetTotalSamples) {
             totalSamplesGenerated = 0L
-            playbackQueue.clear()
+            playbackRingBuffer.clear()
         }
 
         currentBeatIndex = -1
@@ -235,6 +232,12 @@ class TimelineAudioEngine(
 
         if (currentBeatIndex == -1)
         {
+            val pending = pendingPattern.getAndSet(null)
+            if (pending != null) {
+                activePattern = pending
+                anchors = pending.beatAnchors
+            }
+
             // Start of playback: Begin at Beat 0
             currentBeatIndex = 0
             beatStartSampleDouble = totalSamplesGenerated.toDouble()
@@ -255,7 +258,7 @@ class TimelineAudioEngine(
             else {
                 // Tier 1: Beat Boundary (Same nominalBeats only, race-safe CAS)
                 val pending = pendingPattern.get()
-                if (pending != null && pending.nominalBeats == activePattern.nominalBeats)
+                if (pending != null && kotlin.math.abs(pending.nominalBeats - activePattern.nominalBeats) < 0.0001)
                 {
                     if (pendingPattern.compareAndSet(pending, null)) {
                         activePattern = pending
@@ -267,11 +270,15 @@ class TimelineAudioEngine(
         }
 
         val maxAnchorIndex = anchors.size - 1
-        val safeBeatIndex = if (currentBeatIndex < 0) 0 else if (currentBeatIndex > maxAnchorIndex) maxAnchorIndex else currentBeatIndex
+        val safeBeatIndex =
+            if (currentBeatIndex < 0) 0
+            else if (currentBeatIndex > maxAnchorIndex) maxAnchorIndex
+            else currentBeatIndex
+
         val anchor = anchors[safeBeatIndex]
 
         val rawNominal = activePattern.nominalBeats
-        val safeNominal = if (rawNominal < 1) 1 else rawNominal
+        val safeNominal = if (rawNominal < 0.0001) 1.0 else rawNominal
 
         val deltaBeats = (anchor.endRatio - anchor.startRatio) * safeNominal
         val exactBeatDuration = deltaBeats * (sampleRate.toDouble() * 60.0) / safeBpm
@@ -345,7 +352,16 @@ class TimelineAudioEngine(
                     }
 
                     val globalSamplePos = totalSamplesGenerated + delayInSlice
-                    playbackQueue.add(PlaybackEvent(globalSamplePos, event.metadata))
+                    val meta = event.metadata
+
+                    playbackRingBuffer.offer(
+                        samplePosition = globalSamplePos,
+                        trackIndex = meta.trackIndex,
+                        beatIndex = meta.beatIndex,
+                        subIndex = meta.subIndex,
+                        isPrimary = meta.isPrimaryBeat,
+                        isDownbeat = meta.isDownbeat
+                    )
                 }
             }
             eIdx++
@@ -366,7 +382,7 @@ class TimelineAudioEngine(
             i++
         }
 
-        var maxPos = -1
+        var minRemaining = Int.MAX_VALUE
         var chosen = voicePool[0]
 
         i = 0
@@ -375,8 +391,13 @@ class TimelineAudioEngine(
         {
             val v = voicePool[i]
 
-            if (v.readPosition > maxPos) {
-                maxPos = v.readPosition
+            val buf = v.samples
+            val remaining = if (buf != null) buf.size - v.readPosition else 0
+
+            // Drop voice with the least remaining samples to play
+            if (remaining < minRemaining)
+            {
+                minRemaining = remaining
                 chosen = v
             }
 

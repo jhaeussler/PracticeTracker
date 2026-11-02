@@ -11,7 +11,7 @@ class TimelinePatternTest {
 
     @Test
     fun `empty events pattern generates uniform anchors based on nominalBeats`() {
-        val pattern = TimelinePattern(nominalBeats = 4, events = emptyList())
+        val pattern = TimelinePattern(nominalBeats = 4.0, events = emptyList())
 
         assertEquals(4, pattern.beatAnchors.size)
         assertEquals(0.00, pattern.beatAnchors[0].startRatio, 1e-6)
@@ -31,7 +31,7 @@ class TimelinePatternTest {
             )
         }
 
-        val pattern = TimelinePattern(nominalBeats = 4, events = events)
+        val pattern = TimelinePattern(nominalBeats = 4.0, events = events)
 
         assertEquals(4, pattern.beatAnchors.size)
 
@@ -57,7 +57,7 @@ class TimelinePatternTest {
             TimelineEvent(0.375, SoundId.CLICK_SUBDIVISION, 1.0f, EventMetadata(beatIndex = 1, subIndex = 1, isPrimaryBeat = false))
         )
 
-        val pattern = TimelinePattern(nominalBeats = 2, events = events)
+        val pattern = TimelinePattern(nominalBeats = 2.0, events = events)
 
         assertEquals(2, pattern.beatAnchors.size)
         assertEquals(0.0, pattern.beatAnchors[0].startRatio, 1e-6)
@@ -74,7 +74,7 @@ class TimelinePatternTest {
         )
         val pattern = GridPatternGenerator.createPattern(config)
 
-        assertEquals(20, pattern.nominalBeats)
+        assertEquals(20.0, pattern.nominalBeats, 1e-6)
         assertEquals(20, pattern.beatAnchors.size)
         assertEquals(0.0, pattern.beatAnchors[0].startRatio, 1e-6)
         assertEquals(1.0, pattern.beatAnchors[19].endRatio, 1e-6)
@@ -91,8 +91,8 @@ class TimelinePatternTest {
 
     @Test
     fun `structural equality succeeds across distinct array instances with same content`() {
-        val patternA = TimelinePattern(nominalBeats = 4, events = emptyList())
-        val patternB = TimelinePattern(nominalBeats = 4, events = emptyList())
+        val patternA = TimelinePattern(nominalBeats = 4.0, events = emptyList())
+        val patternB = TimelinePattern(nominalBeats = 4.0, events = emptyList())
 
         assertEquals(patternA, patternB)
         assertEquals(patternA.hashCode(), patternB.hashCode())

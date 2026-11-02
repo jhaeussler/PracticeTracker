@@ -25,6 +25,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import org.jhaeussler.practicetracker.drummachine.session.DrumMachineSession
 
 @Composable
 fun EditBpmDialog(
@@ -47,7 +48,11 @@ fun EditBpmDialog(
     val focusRequester = remember { FocusRequester() }
 
     val onAccept = {
-        val parsed = textFieldValue.text.toIntOrNull()?.coerceIn(30, 300)
+        val parsed = textFieldValue.text.toIntOrNull()?.coerceIn(
+            DrumMachineSession.MIN_BPM,
+            DrumMachineSession.MAX_BPM
+        )
+
         if (parsed != null) onConfirm(parsed) else onDismiss()
     }
 
@@ -81,16 +86,14 @@ fun EditBpmDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Range: 30 - 300 BPM",
+                    text = "Range: ${DrumMachineSession.MIN_BPM} - ${DrumMachineSession.MAX_BPM} BPM",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = onAccept
-            ) {
+            TextButton(onClick = onAccept) {
                 Text("Set")
             }
         },

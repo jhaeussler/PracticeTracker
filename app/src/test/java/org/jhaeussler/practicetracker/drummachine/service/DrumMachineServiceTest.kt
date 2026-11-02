@@ -11,6 +11,8 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.jhaeussler.practicetracker.drummachine.engine.EventMetadata
+import org.jhaeussler.practicetracker.drummachine.engine.PlaybackEvent
 import org.jhaeussler.practicetracker.drummachine.session.AppDrumMachineSession
 import org.jhaeussler.practicetracker.drummachine.session.RhythmMode
 import org.junit.After
@@ -383,6 +385,112 @@ class DrumMachineServiceTest {
         }, 0, 2)
 
         assertNotNull(shadowNotificationManager.getNotification(420))
+
+        controller.destroy()
+    }
+
+    // --- Continuous Playback Sample Tracking Tests ---
+
+    @Test
+    fun `getContinuousPlaybackSamples tracks monotonic sample counts under normal conditions`() {
+        val controller = Robolectric.buildService(DrumMachineService::class.java)
+        val service = controller.create().get()
+
+        service.resetPlaybackHeadTracking()
+
+        assertEquals(0L, service.getContinuousPlaybackSamples(0L))
+        assertEquals(1000L, service.getContinuousPlaybackSamples(1000L))
+        assertEquals(1_000_000L, service.getContinuousPlaybackSamples(1_000_000L))
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `getContinuousPlaybackSamples handles 32-bit unsigned overflow correctly`() {
+        val controller = Robolectric.buildService(DrumMachineService::class.java)
+        val service = controller.create().get()
+
+        service.resetPlaybackHeadTracking()
+
+        val nearMax32Bit = 0xF0000000L
+        assertEquals(nearMax32Bit, service.getContinuousPlaybackSamples(nearMax32Bit))
+
+        val wrappedPos = 0x00001000L
+        val expectedContinuousPos = (1L shl 32) or wrappedPos
+
+        assertEquals(expectedContinuousPos, service.getContinuousPlaybackSamples(wrappedPos))
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `getContinuousPlaybackSamples handles multiple 32-bit unsigned wrap-arounds over time`() {
+        val controller = Robolectric.buildService(DrumMachineService::class.java)
+        val service = controller.create().get()
+
+        service.resetPlaybackHeadTracking()
+
+        // Wrap 1
+        service.getContinuousPlaybackSamples(0xF5000000L)
+        val wrap1Pos = service.getContinuousPlaybackSamples(0x00000064L)
+        assertEquals((1L shl 32) or 0x64L, wrap1Pos)
+
+        // Wrap 2
+        service.getContinuousPlaybackSamples(0xF5000000L)
+        val wrap2Pos = service.getContinuousPlaybackSamples(0x000000C8L)
+        assertEquals((2L shl 32) or 0xC8L, wrap2Pos)
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `resetPlaybackHeadTracking resets headWrapCount and lastRawHeadPos`() {
+        val controller = Robolectric.buildService(DrumMachineService::class.java)
+        val service = controller.create().get()
+
+        service.resetPlaybackHeadTracking()
+        service.getContinuousPlaybackSamples(0xF5000000L)
+        service.getContinuousPlaybackSamples(0x00000064L)
+
+        // Reset tracking state
+        service.resetPlaybackHeadTracking()
+
+        assertEquals(500L, service.getContinuousPlaybackSamples(500L))
+
+        controller.destroy()
+    }
+
+    // --- Playback Event and Cleanup Tests ---
+
+    @Test
+    fun `stopping service clears playback event and resets session state`() {
+        val controller = Robolectric.buildService(DrumMachineService::class.java)
+        val service = controller.create().get()
+
+        service.onStartCommand(Intent(context, DrumMachineService::class.java).apply {
+            action = DrumMachineService.ACTION_START
+        }, 0, 1)
+        assertTrue(session.isRunning.value)
+
+        session.updatePlaybackEvent(
+            PlaybackEvent(
+                samplePosition = 1234L,
+                metadata = EventMetadata(
+                    beatIndex = 0,
+                    subIndex = 0,
+                    isPrimaryBeat = true,
+                    isDownbeat = true
+                )
+            )
+        )
+        assertNotNull(session.currentPlaybackEvent.value)
+
+        service.onStartCommand(Intent(context, DrumMachineService::class.java).apply {
+            action = DrumMachineService.ACTION_STOP
+        }, 0, 2)
+
+        assertFalse(session.isRunning.value)
+        assertNull(session.currentPlaybackEvent.value)
 
         controller.destroy()
     }

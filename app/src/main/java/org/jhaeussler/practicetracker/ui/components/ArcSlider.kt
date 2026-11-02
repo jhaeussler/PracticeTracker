@@ -36,7 +36,7 @@ fun ArcSlider(
     sweepAngle: Float = 270f,
     strokeWidth: Dp = 10.dp,
     thumbRadius: Dp = 14.dp,
-    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     activeTrackColor: Color = MaterialTheme.colorScheme.primary,
     thumbColor: Color = MaterialTheme.colorScheme.primary,
     thumbCenterColor: Color = MaterialTheme.colorScheme.surface

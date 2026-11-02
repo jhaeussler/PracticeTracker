@@ -1,21 +1,29 @@
 package org.jhaeussler.practicetracker.drummachine.session
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import org.jhaeussler.practicetracker.drummachine.engine.PlaybackEvent
-import org.jhaeussler.practicetracker.drummachine.engine.TimelinePattern
-import org.jhaeussler.practicetracker.drummachine.grid.GridPatternGenerator
-import org.jhaeussler.practicetracker.drummachine.grid.MeterTrack
-import org.jhaeussler.practicetracker.drummachine.grid.MetronomeConfig
-import org.jhaeussler.practicetracker.drummachine.grid.Subdivision
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.*
+import org.jhaeussler.practicetracker.drummachine.grid.*
+import org.jhaeussler.practicetracker.drummachine.engine.*
+import kotlin.math.roundToInt
 
 enum class RhythmMode {
     METRONOME,
     DRUM_MACHINE
 }
 
-open class DrumMachineSession {
+open class DrumMachineSession(
+    private val sessionScope: CoroutineScope =
+        CoroutineScope(Dispatchers.Default + SupervisorJob())
+) {
+    companion object {
+        const val MIN_BPM = 20
+        const val MAX_BPM = 450
+        const val MIN_BEAT_COUNT = 1
+        const val MAX_BEAT_COUNT = 64
+        private const val TAP_TEMPO_TIMEOUT_MS = 2000L
+    }
 
     private val _mode = MutableStateFlow(RhythmMode.METRONOME)
     val mode: StateFlow<RhythmMode> = _mode.asStateFlow()
@@ -37,6 +45,38 @@ open class DrumMachineSession {
     private val _currentPlaybackEvent = MutableStateFlow<PlaybackEvent?>(null)
     val currentPlaybackEvent: StateFlow<PlaybackEvent?> = _currentPlaybackEvent.asStateFlow()
 
+    // --- Derived UI Visual StateFlows ---
+
+    /**
+     * The actively playing primary beat index (0 .. beatCount-1), or null if stopped.
+     * Filtered with distinctUntilChanged() to prevent subdivisions from triggering recompositions.
+     */
+    val activePrimaryBeat: StateFlow<Int?> = _currentPlaybackEvent
+        .filter { it == null || (it.metadata.trackIndex == 0 && it.metadata.isPrimaryBeat) }
+        .map { it?.metadata?.beatIndex }
+        .distinctUntilChanged()
+        .stateIn(sessionScope, SharingStarted.Eagerly, null)
+
+    /**
+     * The actively playing counter/polymeter beat index, or null if stopped or no counter meter.
+     */
+    val activeCounterBeat: StateFlow<Int?> = _currentPlaybackEvent
+        .filter { it == null || it.metadata.trackIndex == 1 }
+        .map { it?.metadata?.beatIndex }
+        .distinctUntilChanged()
+        .stateIn(sessionScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Pulses true on downbeats (measure starts) to drive visual flash animations.
+     */
+    val isDownbeatFlash: StateFlow<Boolean> = _currentPlaybackEvent
+        .map { it?.metadata?.isDownbeat == true }
+        .stateIn(sessionScope, SharingStarted.Eagerly, false)
+
+    // --- Tap Tempo State ---
+    private val tapTimestamps = mutableListOf<Long>()
+    private var lastTapTime = 0L
+
     // --- Global Transport & Tempo Mutators ---
 
     fun setMode(newMode: RhythmMode) {
@@ -48,8 +88,47 @@ open class DrumMachineSession {
         _bpm.value = newBpm.coerceIn(MIN_BPM, MAX_BPM)
     }
 
-    fun setRunning(running: Boolean) {
+    fun adjustBpm(delta: Int) {
+        setBpm(_bpm.value + delta)
+    }
+
+    fun tapTempo()
+    {
+        val now = System.currentTimeMillis()
+
+        if (now - lastTapTime > TAP_TEMPO_TIMEOUT_MS) {
+            tapTimestamps.clear()
+        }
+
+        lastTapTime = now
+        tapTimestamps.add(now)
+
+        if (tapTimestamps.size > 3) {
+            tapTimestamps.removeAt(0)
+        }
+
+        if (tapTimestamps.size >= 2)
+        {
+            val intervals =
+                (1 until tapTimestamps.size).map { i ->
+                tapTimestamps[i] - tapTimestamps[i - 1]
+            }
+
+            val avgIntervalMs = intervals.average()
+
+            if (avgIntervalMs > 0) {
+                setBpm((60_000.0 / avgIntervalMs).roundToInt())
+            }
+        }
+    }
+
+    fun setRunning(running: Boolean)
+    {
         _isRunning.value = running
+
+        if (!running) {
+            _currentPlaybackEvent.value = null
+        }
     }
 
     fun updatePlaybackEvent(event: PlaybackEvent?) {
@@ -63,9 +142,35 @@ open class DrumMachineSession {
         recompilePattern()
     }
 
-    fun setBeatCount(count: Int) {
-        val updatedMeter = _metronomeConfig.value.primaryMeter.copy(beatCount = count)
+    fun setBeatCount(count: Int)
+    {
+        val safeCount = count.coerceIn(MIN_BEAT_COUNT, MAX_BEAT_COUNT)
+        val updatedMeter = _metronomeConfig.value.primaryMeter.copy(
+            beatCount = safeCount,
+            grouping = MeterTrack.defaultGroupingFor(safeCount)
+        )
+
         setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+    }
+
+    fun incrementBeatCount() = setBeatCount(_metronomeConfig.value.primaryMeter.beatCount + 1)
+
+    fun decrementBeatCount() = setBeatCount(_metronomeConfig.value.primaryMeter.beatCount - 1)
+
+    fun setBeatUnit(unit: BeatUnit) {
+        val updatedMeter = _metronomeConfig.value.primaryMeter.copy(beatUnit = unit)
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+    }
+
+    fun cyclePrimaryBeatState(beatIndex: Int) {
+        val updatedMeter = _metronomeConfig.value.primaryMeter.cycleBeatState(beatIndex)
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+    }
+
+    fun cycleCounterBeatState(beatIndex: Int) {
+        val counter = _metronomeConfig.value.counterMeter ?: return
+        val updatedMeter = counter.cycleBeatState(beatIndex)
+        setMetronomeConfig(_metronomeConfig.value.copy(counterMeter = updatedMeter))
     }
 
     fun toggleBeatAccent(index: Int) {
@@ -78,12 +183,31 @@ open class DrumMachineSession {
         setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
     }
 
+    fun setCounterMeter(counterMeter: MeterTrack?) {
+        setMetronomeConfig(_metronomeConfig.value.copy(counterMeter = counterMeter))
+    }
+
     fun setSubdivision(subdivision: Subdivision) {
         setMetronomeConfig(_metronomeConfig.value.copy(subdivision = subdivision))
     }
 
-    fun setCounterMeter(counterMeter: MeterTrack?) {
-        setMetronomeConfig(_metronomeConfig.value.copy(counterMeter = counterMeter))
+    fun resetToDefaultAccents() {
+        val updatedMeter = _metronomeConfig.value.primaryMeter.copy(accentedBeats = setOf(0))
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+    }
+
+    fun enableCounterMeter(beatCount: Int = 3) {
+        val counter = MeterTrack(
+            beatCount = beatCount.coerceIn(MIN_BEAT_COUNT, MAX_BEAT_COUNT),
+            accentedBeats = setOf(0),
+            soundIdPrimary = SoundId.CLICK_SUBDIVISION, // Distinct sound for counter meter
+            soundIdAccent = SoundId.CLICK_ACCENT
+        )
+        setMetronomeConfig(_metronomeConfig.value.copy(counterMeter = counter))
+    }
+
+    fun disableCounterMeter() {
+        setMetronomeConfig(_metronomeConfig.value.copy(counterMeter = null))
     }
 
     private fun recompilePattern() {
@@ -92,14 +216,44 @@ open class DrumMachineSession {
                 _activePattern.value = GridPatternGenerator.createPattern(_metronomeConfig.value)
             }
             RhythmMode.DRUM_MACHINE -> {
-                // Reserved for Phase 5: FreeformPatternGenerator
+                // Reserved for drum machine patterns
             }
         }
     }
 
-    companion object {
-        const val MIN_BPM = 30
-        const val MAX_BPM = 300
+    fun setPrimaryMeterGrouping(newGrouping: List<Int>)
+    {
+        val currentMeter = _metronomeConfig.value.primaryMeter
+
+        // Only apply if the custom grouping matches the total beats
+        if (newGrouping.sum() == currentMeter.beatCount)
+        {
+            val updatedMeter = _metronomeConfig.value.primaryMeter.copy(grouping = newGrouping)
+            setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+        }
+    }
+
+    /**
+     * Automatically places accents on the downbeat of each group in [grouping]
+     * (e.g., [5, 5, 5, 6] automatically accents beats 0, 5, 10, and 15).
+     */
+    fun applyGroupingAccents() {
+        val meter = _metronomeConfig.value.primaryMeter
+        val groups = if (meter.grouping.sum() == meter.beatCount) {
+            meter.grouping
+        } else {
+            MeterTrack.defaultGroupingFor(meter.beatCount)
+        }
+
+        val newAccents = mutableSetOf<Int>()
+        var offset = 0
+        for (size in groups) {
+            newAccents.add(offset)
+            offset += size
+        }
+
+        val updatedMeter = meter.copy(accentedBeats = newAccents)
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
     }
 }
 
