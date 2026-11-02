@@ -62,8 +62,10 @@
     <string name="number_120">120</string>
     <string name="empty_attribution" translatable="false"></string>
     <string name="tempo_tab_name">Tempo</string>
-    <string name="rythm_tab_name">Rythm</string>
+    <string name="rythm_tab_name">Meter</string>
     <string name="polymeter_tab_name">Polymeter</string>
     <string name="bpm_tab_name">BPM</string>
     <string name="tap_tempo_tab_name">Tap</string>
+    <string name="grouping_tab_name">Grouping</string>
+    <string name="free_tab_name">Free</string>
 </resources>

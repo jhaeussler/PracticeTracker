@@ -19,7 +19,7 @@ class GridPatternGeneratorTest {
 
         val pattern = GridPatternGenerator.createPattern(config)
 
-        assertEquals(4, pattern.nominalBeats)
+        assertEquals(4.0, pattern.nominalBeats, 1e-6)
         assertEquals(4, pattern.events.size)
 
         // Beat 0: Downbeat & Accented
@@ -151,7 +151,7 @@ class GridPatternGeneratorTest {
 
         val pattern = GridPatternGenerator.createPattern(config)
 
-        assertEquals(12, pattern.nominalBeats)
+        assertEquals(12.0, pattern.nominalBeats, 1e-6)
 
         // 12 primary beats + 12 counter meter beats = 24 events
         val primaryEvents = pattern.events.filter { it.soundId == SoundId.CLICK_BEAT || it.soundId == SoundId.CLICK_ACCENT }

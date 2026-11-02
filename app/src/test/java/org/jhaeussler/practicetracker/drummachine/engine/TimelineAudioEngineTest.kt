@@ -5,6 +5,10 @@
 
 package org.jhaeussler.practicetracker.drummachine.engine
 
+import org.jhaeussler.practicetracker.drummachine.grid.BeatUnit
+import org.jhaeussler.practicetracker.drummachine.grid.GridPatternGenerator
+import org.jhaeussler.practicetracker.drummachine.grid.MeterTrack
+import org.jhaeussler.practicetracker.drummachine.grid.MetronomeConfig
 import org.jhaeussler.practicetracker.drummachine.sound.SoundBank
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,7 +38,7 @@ class TimelineAudioEngineTest {
 
     private fun create4_4Pattern(): TimelinePattern {
         return TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(
                     0.00,
@@ -189,7 +193,7 @@ class TimelineAudioEngineTest {
         val cycleSamples = 96000
 
         val arbitraryPattern = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(0.0, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0)),
                 TimelineEvent(0.1, SoundId.CLICK_BEAT, 1.0f, EventMetadata(1, 0)),
@@ -259,7 +263,7 @@ class TimelineAudioEngineTest {
     fun `simultaneous events at identical position sum additively without overwriting`() {
         engine.resetPhase(resetTotalSamples = true)
         val polyPattern = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(0.0, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0)),
                 TimelineEvent(0.0, SoundId.CLICK_BEAT, 1.0f, EventMetadata(0, 0))
@@ -278,7 +282,7 @@ class TimelineAudioEngineTest {
     fun `additive mixing clamps to 16-bit short bounds without integer overflow wrapping`() {
         engine.resetPhase(resetTotalSamples = true)
         val loudPattern = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(0.0, SoundId.DRUM_KICK, 1.0f, EventMetadata(0, 0)),
                 TimelineEvent(0.0, SoundId.DRUM_SNARE, 1.0f, EventMetadata(0, 0))
@@ -325,7 +329,7 @@ class TimelineAudioEngineTest {
         engine.setSoundBank(defaultSoundBank.copyWith(SoundId.DRUM_CLAP, customSound))
 
         val patternB = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(0.00, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0)),
                 TimelineEvent(0.25, SoundId.DRUM_CLAP, 1.0f, EventMetadata(1, 0)),
@@ -361,7 +365,7 @@ class TimelineAudioEngineTest {
         engine.setSoundBank(defaultSoundBank.copyWith(SoundId.DRUM_CLAP, clapSound))
 
         val pattern3_4 = TimelinePattern(
-            nominalBeats = 3,
+            nominalBeats = 3.0,
             events = listOf(
                 TimelineEvent(
                     0.000,
@@ -489,7 +493,7 @@ class TimelineAudioEngineTest {
         assertEquals(0, engine.getCurrentBeatIndex())
 
         val patternB = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(0.00, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0))
             )
@@ -520,7 +524,7 @@ class TimelineAudioEngineTest {
         assertEquals(0, engine.getCurrentBeatIndex())
 
         val pattern3 = TimelinePattern(
-            nominalBeats = 3,
+            nominalBeats = 3.0,
             events = listOf(
                 TimelineEvent(0.0, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0))
             )
@@ -559,7 +563,7 @@ class TimelineAudioEngineTest {
 
         // 2. Pattern B has NO event on Beat 1, so any sound in Beat 1 MUST come from the in-flight voice
         val patternB = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(0.00, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0))
             )
@@ -632,8 +636,8 @@ class TimelineAudioEngineTest {
 
         engine.resetPhase(resetTotalSamples = true)
 
-        val patternA = TimelinePattern(nominalBeats = 4, events = emptyList())
-        val patternB = TimelinePattern(nominalBeats = 4, events = emptyList())
+        val patternA = TimelinePattern(nominalBeats = 4.0, events = emptyList())
+        val patternB = TimelinePattern(nominalBeats = 4.0, events = emptyList())
 
         engine.setPattern(patternA)
 
@@ -727,13 +731,13 @@ class TimelineAudioEngineTest {
 
         val pattern4 = create4_4Pattern()
         val pattern3 = TimelinePattern(
-            nominalBeats = 3,
+            nominalBeats = 3.0,
             events = listOf(
                 TimelineEvent(0.0, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0))
             )
         )
         val pattern5 = TimelinePattern(
-            nominalBeats = 5,
+            nominalBeats = 5.0,
             events = listOf(
                 TimelineEvent(0.0, SoundId.CLICK_ACCENT, 1.0f, EventMetadata(0, 0))
             )
@@ -803,7 +807,7 @@ class TimelineAudioEngineTest {
         // 3. Stage a distinct 3/4 pattern whose downbeat uses DRUM_KICK (loudSampleA)
         //    instead of the default 4/4 CLICK_ACCENT (accentSample)
         val pattern3_4 = TimelinePattern(
-            nominalBeats = 3,
+            nominalBeats = 3.0,
             events = listOf(
                 TimelineEvent(
                     positionRatio = 0.0,
@@ -854,7 +858,7 @@ class TimelineAudioEngineTest {
         // - Sample 0: Trigger Sound A (DRUM_KICK)
         // - Sample 100: Trigger Sound B (DRUM_SNARE) and Sound C (DRUM_CLAP)
         val testPattern = TimelinePattern(
-            nominalBeats = 4,
+            nominalBeats = 4.0,
             events = listOf(
                 TimelineEvent(
                     positionRatio = 0.0,
@@ -906,5 +910,39 @@ class TimelineAudioEngineTest {
             10000.toShort(),
             chunk3[0]
         )
+    }
+
+    @Test
+    fun test7_8MeterAt120BpmRendersSampleAccurateEighthNotes() {
+        // 7/8 meter @ 120 BPM with 48kHz sample rate:
+        // 1 quarter note = 24,000 samples (500 ms)
+        // 1 eighth note = 12,000 samples (250 ms)
+        // Total measure (7 eighth notes) = 84,000 samples (1.75 seconds)
+        val config7_8 = MetronomeConfig(
+            primaryMeter = MeterTrack(beatCount = 7, beatUnit = BeatUnit.EIGHTH)
+        )
+        val pattern = GridPatternGenerator.createPattern(config7_8)
+
+        // Verify pattern scaling: 7 * 0.5 = 3.5 quarter notes
+        assertEquals(3.5, pattern.nominalBeats, 0.0001)
+
+        engine.resetPhase(resetTotalSamples = true)
+        engine.setPattern(pattern)
+
+        val measureSamples = 12000 * 7 // 84,000 samples
+        val renderBuffer = ShortArray(measureSamples)
+        engine.fillNextChunk(renderBuffer, bpm = 120)
+
+        val events = engine.drainPlaybackEvents()
+
+        assertEquals("Must trigger all 7 eighth notes", 7, events.size)
+
+        // Verify each eighth-note tick lands exactly 12,000 samples (250ms) apart
+        for (i in 0 until 7)
+        {
+            val expectedSample = i * 12000L
+            assertEquals("Beat $i sample position mismatch", expectedSample, events[i].samplePosition)
+            assertEquals("Beat $i index mismatch", i, events[i].metadata.beatIndex)
+        }
     }
 }

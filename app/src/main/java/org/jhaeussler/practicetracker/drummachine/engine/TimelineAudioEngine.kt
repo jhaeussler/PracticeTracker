@@ -2,7 +2,6 @@ package org.jhaeussler.practicetracker.drummachine.engine
 
 import org.jhaeussler.practicetracker.drummachine.sound.SoundBank
 import java.util.Arrays
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -31,7 +30,7 @@ class TimelineAudioEngine(
     private var soundBank: SoundBank = SoundBank()
 
     @Volatile
-    private var activePattern: TimelinePattern = TimelinePattern(4, emptyList())
+    private var activePattern: TimelinePattern = TimelinePattern(4.0, emptyList())
 
     private val pendingPattern = AtomicReference<TimelinePattern?>(null)
     private var currentBeatIndex: Int = -1
@@ -259,7 +258,7 @@ class TimelineAudioEngine(
             else {
                 // Tier 1: Beat Boundary (Same nominalBeats only, race-safe CAS)
                 val pending = pendingPattern.get()
-                if (pending != null && pending.nominalBeats == activePattern.nominalBeats)
+                if (pending != null && kotlin.math.abs(pending.nominalBeats - activePattern.nominalBeats) < 0.0001)
                 {
                     if (pendingPattern.compareAndSet(pending, null)) {
                         activePattern = pending
@@ -271,11 +270,15 @@ class TimelineAudioEngine(
         }
 
         val maxAnchorIndex = anchors.size - 1
-        val safeBeatIndex = if (currentBeatIndex < 0) 0 else if (currentBeatIndex > maxAnchorIndex) maxAnchorIndex else currentBeatIndex
+        val safeBeatIndex =
+            if (currentBeatIndex < 0) 0
+            else if (currentBeatIndex > maxAnchorIndex) maxAnchorIndex
+            else currentBeatIndex
+
         val anchor = anchors[safeBeatIndex]
 
         val rawNominal = activePattern.nominalBeats
-        val safeNominal = if (rawNominal < 1) 1 else rawNominal
+        val safeNominal = if (rawNominal < 0.0001) 1.0 else rawNominal
 
         val deltaBeats = (anchor.endRatio - anchor.startRatio) * safeNominal
         val exactBeatDuration = deltaBeats * (sampleRate.toDouble() * 60.0) / safeBpm

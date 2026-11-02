@@ -1,5 +1,7 @@
 package org.jhaeussler.practicetracker.drummachine.engine
 
+import kotlin.math.roundToInt
+
 enum class SoundId {
     CLICK_ACCENT,
     CLICK_BEAT,
@@ -60,7 +62,7 @@ data class BeatAnchor(
 )
 
 data class TimelinePattern(
-    val nominalBeats: Int = 4,
+    val nominalBeats: Double = 4.0,
     val events: List<TimelineEvent> = emptyList(),
     val beatAnchors: Array<BeatAnchor> = computeBeatAnchors(nominalBeats, events)
 ) {
@@ -79,7 +81,7 @@ data class TimelinePattern(
 
     override fun hashCode(): Int
     {
-        var result = nominalBeats
+        var result = nominalBeats.hashCode()
         result = 31 * result + events.hashCode()
         result = 31 * result + beatAnchors.contentHashCode()
 
@@ -92,8 +94,8 @@ data class TimelinePattern(
          * Extracts beat segment boundaries from primary beat positions, falling back
          * to uniform nominal slices when no primary events exist.
          */
-        fun computeBeatAnchors(nominalBeats: Int, events: List<TimelineEvent>): Array<BeatAnchor> {
-            val safeBeats = nominalBeats.coerceAtLeast(1)
+        fun computeBeatAnchors(nominalBeats: Double, events: List<TimelineEvent>): Array<BeatAnchor> {
+            val safeBeats = nominalBeats.roundToInt().coerceAtLeast(1)
 
             if (events.isEmpty())
             {

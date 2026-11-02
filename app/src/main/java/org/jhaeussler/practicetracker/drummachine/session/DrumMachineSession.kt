@@ -154,7 +154,13 @@ open class DrumMachineSession(
     }
 
     fun incrementBeatCount() = setBeatCount(_metronomeConfig.value.primaryMeter.beatCount + 1)
+
     fun decrementBeatCount() = setBeatCount(_metronomeConfig.value.primaryMeter.beatCount - 1)
+
+    fun setBeatUnit(unit: BeatUnit) {
+        val updatedMeter = _metronomeConfig.value.primaryMeter.copy(beatUnit = unit)
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+    }
 
     fun cyclePrimaryBeatState(beatIndex: Int) {
         val updatedMeter = _metronomeConfig.value.primaryMeter.cycleBeatState(beatIndex)
@@ -185,6 +191,11 @@ open class DrumMachineSession(
         setMetronomeConfig(_metronomeConfig.value.copy(subdivision = subdivision))
     }
 
+    fun resetToDefaultAccents() {
+        val updatedMeter = _metronomeConfig.value.primaryMeter.copy(accentedBeats = setOf(0))
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
+    }
+
     fun enableCounterMeter(beatCount: Int = 3) {
         val counter = MeterTrack(
             beatCount = beatCount.coerceIn(MIN_BEAT_COUNT, MAX_BEAT_COUNT),
@@ -210,12 +221,39 @@ open class DrumMachineSession(
         }
     }
 
-    fun setPrimaryMeterGrouping(newGrouping: List<Int>) {
+    fun setPrimaryMeterGrouping(newGrouping: List<Int>)
+    {
+        val currentMeter = _metronomeConfig.value.primaryMeter
+
         // Only apply if the custom grouping matches the total beats
-        if (newGrouping.sum() == _metronomeConfig.value.primaryMeter.beatCount) {
+        if (newGrouping.sum() == currentMeter.beatCount)
+        {
             val updatedMeter = _metronomeConfig.value.primaryMeter.copy(grouping = newGrouping)
             setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
         }
+    }
+
+    /**
+     * Automatically places accents on the downbeat of each group in [grouping]
+     * (e.g., [5, 5, 5, 6] automatically accents beats 0, 5, 10, and 15).
+     */
+    fun applyGroupingAccents() {
+        val meter = _metronomeConfig.value.primaryMeter
+        val groups = if (meter.grouping.sum() == meter.beatCount) {
+            meter.grouping
+        } else {
+            MeterTrack.defaultGroupingFor(meter.beatCount)
+        }
+
+        val newAccents = mutableSetOf<Int>()
+        var offset = 0
+        for (size in groups) {
+            newAccents.add(offset)
+            offset += size
+        }
+
+        val updatedMeter = meter.copy(accentedBeats = newAccents)
+        setMetronomeConfig(_metronomeConfig.value.copy(primaryMeter = updatedMeter))
     }
 }
 

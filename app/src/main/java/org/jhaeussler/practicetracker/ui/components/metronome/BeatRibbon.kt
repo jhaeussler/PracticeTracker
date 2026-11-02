@@ -6,8 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.NavigateBefore
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,11 +49,10 @@ fun BeatRibbon(
             if (windows.size > 1) {
                 IconButton(
                     onClick = onPreviousWindow,
-                    enabled = safeWindowIndex > 0,
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
+                        imageVector = Icons.AutoMirrored.Filled.NavigateBefore,
                         contentDescription = "Previous Beat Window",
                         tint = if (safeWindowIndex > 0) MaterialTheme.colorScheme.onSurface else Color.DarkGray,
                         modifier = Modifier.size(16.dp)
@@ -65,7 +64,8 @@ fun BeatRibbon(
             // The Active Beat-Window Buttons
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.width(290.dp)
             ) {
                 for (beatIndex in currentRange) {
                     val isCurrent = (activeBeatIndex == beatIndex)
@@ -87,27 +87,16 @@ fun BeatRibbon(
                 Spacer(modifier = Modifier.width(4.dp))
                 IconButton(
                     onClick = onNextWindow,
-                    enabled = safeWindowIndex < windows.size - 1,
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        imageVector = Icons.AutoMirrored.Filled.NavigateNext,
                         contentDescription = "Next Beat Window",
                         tint = if (safeWindowIndex < windows.size - 1) MaterialTheme.colorScheme.onSurface else Color.DarkGray,
                         modifier = Modifier.size(16.dp)
                     )
                 }
             }
-        }
-
-        // Sub-area label for complex meters (e.g. "Beats 6 - 10 of 21")
-        if (windows.size > 1) {
-            Text(
-                text = "Beats ${currentRange.first + 1} - ${currentRange.last + 1} of ${primaryMeter.beatCount}",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray,
-                modifier = Modifier.padding(top = 4.dp)
-            )
         }
     }
 }

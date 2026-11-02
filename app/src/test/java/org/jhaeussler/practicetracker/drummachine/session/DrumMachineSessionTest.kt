@@ -2,6 +2,7 @@ package org.jhaeussler.practicetracker.drummachine.session
 
 import org.jhaeussler.practicetracker.drummachine.engine.EventMetadata
 import org.jhaeussler.practicetracker.drummachine.engine.PlaybackEvent
+import org.jhaeussler.practicetracker.drummachine.grid.BeatUnit
 import org.jhaeussler.practicetracker.drummachine.grid.Subdivision
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,7 +32,7 @@ class DrumMachineSessionTest {
         assertEquals(Subdivision.NONE, session.metronomeConfig.value.subdivision)
 
         // Active pattern should be pre-compiled to 4 nominal beats
-        assertEquals(4, session.activePattern.value.nominalBeats)
+        assertEquals(4.0, session.activePattern.value.nominalBeats, 1e-6)
         assertEquals(4, session.activePattern.value.events.size)
     }
 
@@ -64,7 +65,7 @@ class DrumMachineSessionTest {
         session.setBeatCount(3)
 
         assertEquals(3, session.metronomeConfig.value.primaryMeter.beatCount)
-        assertEquals(3, session.activePattern.value.nominalBeats)
+        assertEquals(3.0, session.activePattern.value.nominalBeats, 1e-6)
         assertEquals(3, session.activePattern.value.events.size)
     }
 
@@ -96,5 +97,23 @@ class DrumMachineSessionTest {
 
         session.updatePlaybackEvent(event)
         assertEquals(event, session.currentPlaybackEvent.value)
+    }
+
+    @Test
+    fun setBeatUnit_updatesDenominatorAndScalesPattern() {
+        // 1. Start with 4/4 meter (4 quarter notes = 4.0 nominal beats)
+        session.setBeatCount(4)
+        session.setBeatUnit(BeatUnit.QUARTER)
+        assertEquals(4.0, session.activePattern.value.nominalBeats, 0.0001)
+
+        // 2. Switch to 7/8 meter (7 eighth notes = 3.5 nominal beats)
+        session.setBeatCount(7)
+        session.setBeatUnit(BeatUnit.EIGHTH)
+        assertEquals(3.5, session.activePattern.value.nominalBeats, 0.0001)
+
+        // 3. Switch to 15/16 meter (15 sixteenth notes = 3.75 nominal beats)
+        session.setBeatCount(15)
+        session.setBeatUnit(BeatUnit.SIXTEENTH)
+        assertEquals(3.75, session.activePattern.value.nominalBeats, 0.0001)
     }
 }

@@ -7,6 +7,7 @@ package org.jhaeussler.practicetracker.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,12 +28,16 @@ import org.jhaeussler.practicetracker.ui.components.metronome.BpmControlSection
 import org.jhaeussler.practicetracker.ui.viewModels.MetronomeViewModel
 import org.jhaeussler.practicetracker.ui.components.PracticeAppButton
 import org.jhaeussler.practicetracker.ui.components.metronome.TabTempoSection
+import org.jhaeussler.practicetracker.ui.components.metronome.rythm.GroupingSection
+import org.jhaeussler.practicetracker.ui.components.metronome.rythm.MeterSection
 
 enum class MetronomeTab(val title: Int) {
     BPM(R.string.bpm_tab_name),
-    TAB_TEMPO(R.string.tap_tempo_tab_name),
-    RHYTHM(R.string.rythm_tab_name),
-    POLYMETER(R.string.polymeter_tab_name)
+    TAP_TEMPO(R.string.tap_tempo_tab_name),
+    METER(R.string.rythm_tab_name),
+    GROUPING(R.string.grouping_tab_name),
+    POLYMETER(R.string.polymeter_tab_name),
+    FREE(R.string.free_tab_name)
 }
 
 
@@ -105,32 +110,25 @@ fun MetronomeScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth(0.9f)
+        val row1Tabs = remember { listOf(MetronomeTab.BPM, MetronomeTab.TAP_TEMPO, MetronomeTab.METER) }
+        val row2Tabs = remember { listOf(MetronomeTab.GROUPING, MetronomeTab.POLYMETER, MetronomeTab.FREE) }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(0.92f)
         ) {
-            MetronomeTab.entries.forEachIndexed { index, tab ->
-                SegmentedButton(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = MetronomeTab.entries.size
-                    ),
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        inactiveContentColor = Color.Black
-                    ),
-                    label = {
-                        Text(
-                            text = stringResource(tab.title),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                )
-            }
+            CategoryButtonRow(
+                selectedTab = selectedTab,
+                categories = row1Tabs
+            )
+            { selectedTab = it }
+
+            CategoryButtonRow(
+                selectedTab = selectedTab,
+                categories = row2Tabs
+            )
+            { selectedTab = it }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -159,39 +157,99 @@ fun MetronomeScreen(
                     )
                 }
 
-                MetronomeTab.TAB_TEMPO -> {
+                MetronomeTab.TAP_TEMPO -> {
                     TabTempoSection(
                         bpm = bpm,
                         onTapTempo = { viewModel.tapTempo() }
                     )
                 }
 
-                MetronomeTab.RHYTHM -> {
-                    // Placeholder for Step 3: Beat Sequencer + Subdivision Chips
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(280.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Rhythm & Subdivisions (Next Step)")
-                    }
+                MetronomeTab.METER -> {
+                    val timingSummary by viewModel.timingSummary.collectAsStateWithLifecycle()
+
+                    MeterSection(
+                        primaryMeter = config.primaryMeter,
+                        subdivision = config.subdivision,
+                        timingSummary = timingSummary,
+                        onIncrementBeatCount = { viewModel.incrementBeatCount() },
+                        onDecrementBeatCount = { viewModel.decrementBeatCount() },
+                        onBeatUnitSelected = { viewModel.setBeatUnit(it) },
+                        onSubdivisionSelected = { viewModel.setSubdivision(it) }
+                    )
+                }
+
+                MetronomeTab.GROUPING -> {
+                    GroupingSection(
+                        primaryMeter = config.primaryMeter,
+                        onAdjustGroupSize = { index, delta -> viewModel.adjustGroupSize(index, delta) },
+                        onSplitGroup = { viewModel.splitGroup(it) },
+                        onMergeGroupWithPrevious = { viewModel.mergeGroupWithPrevious(it) },
+                        onResetGrouping = { viewModel.resetGroupingToDefault() },
+                        onApplyGroupingAccents = { viewModel.applyGroupingAccents() },
+                        onResetToDefaultAccents = { viewModel.resetToDefaultAccents() },
+                        onToggleBeat = { viewModel.cyclePrimaryBeatState(it) }
+                    )
                 }
 
                 MetronomeTab.POLYMETER -> {
-                    // Placeholder for Step 4: Polymeter Track
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(280.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Polymeter Track (Following Step)")
+                        Text("TODO: multi-track polymeter rythms")
+                    }
+                }
+
+                MetronomeTab.FREE -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("TODO: free interval division")
                     }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
+fun CategoryButtonRow(
+    selectedTab: MetronomeTab,
+    categories: List<MetronomeTab>,
+    onTabSelected: (MetronomeTab) -> Unit
+) {
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        categories.forEachIndexed { index, tab ->
+            SegmentedButton(
+                selected = selectedTab == tab,
+                onClick = { onTabSelected(tab) },
+                shape = SegmentedButtonDefaults.itemShape(
+                    index = index,
+                    count = categories.size
+                ),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    inactiveContentColor = Color.Black
+                ),
+                label = {
+                    Text(
+                        text = stringResource(tab.title),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
+        }
     }
 }
