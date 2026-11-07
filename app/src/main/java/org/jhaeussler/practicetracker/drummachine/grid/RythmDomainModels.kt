@@ -45,32 +45,42 @@ enum class Subdivision(val pulses: Int, val overBeats: Int) {
 
     fun getLabelFor(beatUnit: BeatUnit): String = when (this)
     {
-        NONE -> "1:1 (Quarter notes)"
+        NONE -> when (beatUnit) {
+            BeatUnit.HALF -> "1:1 - Half note"
+            BeatUnit.QUARTER -> "1:1 - ♩"
+            BeatUnit.EIGHTH -> "1:1 - ♪"
+            BeatUnit.SIXTEENTH -> "1:1 - ♬"
+        }
 
         EIGHTHS -> when (beatUnit) {
-            BeatUnit.HALF -> "2:1 (Quarter notes)"
-            BeatUnit.QUARTER -> "2:1 (8th notes)"
-            BeatUnit.EIGHTH -> "2:1 (16th notes)"
-            BeatUnit.SIXTEENTH -> "2:1 (32nd notes)"
+            BeatUnit.HALF -> "2:1 - ♩"
+            BeatUnit.QUARTER -> "2:1 - ♪"
+            BeatUnit.EIGHTH -> "2:1 - ♬"
+            BeatUnit.SIXTEENTH -> "2:1 - 32nd notes"
         }
 
         EIGHTH_TRIPLETS -> when (beatUnit) {
-            BeatUnit.HALF -> "3:1 (Quarter Triplets)"
-            BeatUnit.QUARTER -> "3:1 (Triplets)"
-            BeatUnit.EIGHTH -> "3:1 (16th Triplets)"
-            BeatUnit.SIXTEENTH -> "3:1 (32nd Triplets)"
+            BeatUnit.HALF -> "3:1 - ♩ Trip"
+            BeatUnit.QUARTER -> "3:1 - ♪ Trip"
+            BeatUnit.EIGHTH -> "3:1 - ♬ Trip"
+            BeatUnit.SIXTEENTH -> "3:1 - 32nd Trip"
         }
 
         SIXTEENTHS -> when (beatUnit) {
-            BeatUnit.HALF -> "4:1 (8th notes)"
-            BeatUnit.QUARTER -> "4:1 (16th notes)"
-            BeatUnit.EIGHTH -> "4:1 (32nd notes)"
-            BeatUnit.SIXTEENTH -> "4:1 (64th notes)"
+            BeatUnit.HALF -> "4:1 - ♪"
+            BeatUnit.QUARTER -> "4:1 - ♬"
+            BeatUnit.EIGHTH -> "4:1 - 32nd notes"
+            BeatUnit.SIXTEENTH -> "4:1 - 64th notes"
         }
 
-        SIXTEENTH_TRIPLETS -> "6:1 (Sextuplets)"
+        SIXTEENTH_TRIPLETS -> "6:1 - Sextuplets"
 
-        QUARTER_TRIPLETS -> "3:2 (Cross-Beat)"
+        QUARTER_TRIPLETS -> when (beatUnit) {
+            BeatUnit.HALF -> "3:2 - Half note Trip"
+            BeatUnit.QUARTER -> "3:2 - ♩ Trip"
+            BeatUnit.EIGHTH -> "3:2 - ♪ Trip"
+            BeatUnit.SIXTEENTH -> "3:2 - ♬ Trip"
+        }
     }
 }
 

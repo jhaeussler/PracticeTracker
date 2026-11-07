@@ -39,18 +39,15 @@ fun BeatCountInput(
             Icon(Icons.Default.Remove, contentDescription = "Decrease beats")
         }
 
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(12.dp),
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier.width(70.dp).height(50.dp)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = "$beatCount",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Text(
+                text = "$beatCount",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         FilledTonalIconButton(

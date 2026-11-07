@@ -86,13 +86,24 @@ fun TimeSignatureBlock(
             onDecrement = onDecrement
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(7.dp))
 
         HorizontalDivider(
             thickness = 2.dp,
             color = Color.DarkGray,
             modifier = Modifier.fillMaxWidth(0.5f)
         )
+
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(7.dp)
+        ) {
+            Text(
+                text = "${beatUnit.denominator}",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -106,7 +117,8 @@ fun TimeSignatureBlock(
                     label = {
                         Text(
                             text = "/${unit.denominator} ${unit.symbol}",
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     },
                     shape = RoundedCornerShape(8.dp)
@@ -138,11 +150,11 @@ fun TimeSignatureBlock(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp)
                     ) {
                         Text(
                             text = subdivision.getLabelFor(beatUnit),
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -150,7 +162,7 @@ fun TimeSignatureBlock(
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
                             contentDescription = "Select Subdivision",
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(21.dp),
                             tint = Color.Gray
                         )
                     }
