@@ -34,10 +34,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.jhaeussler.practicetracker.drummachine.grid.*
 import org.jhaeussler.practicetracker.ui.components.BackgroundCard
+import org.jhaeussler.practicetracker.ui.components.metronome.BeatColorMapping
 
 @Composable
 fun GroupingSection(
     primaryMeter: MeterTrack,
+    activeBeatIndex: Int?,
     onAdjustGroupSize: (groupIndex: Int, delta: Int) -> Unit,
     onSplitGroup: (Int) -> Unit,
     onMergeGroupWithPrevious: (Int) -> Unit,
@@ -148,6 +150,7 @@ fun GroupingSection(
                             groupSize = groupSize,
                             startBeatIndex = startBeat,
                             primaryMeter = primaryMeter,
+                            activeBeatIndex = activeBeatIndex,
                             canSplit = groupSize >= 2,
                             canMerge = groupIndex > 0 && groups[groupIndex - 1] < 8,
                             canIncrement = canIncrement,
@@ -172,6 +175,7 @@ private fun GroupRowCard(
     groupSize: Int,
     startBeatIndex: Int,
     primaryMeter: MeterTrack,
+    activeBeatIndex: Int?,
     canSplit: Boolean,
     canMerge: Boolean,
     canIncrement: Boolean,
@@ -211,6 +215,7 @@ private fun GroupRowCard(
 
                     MiniBeatCircle(
                         beatNumber = beatNumber,
+                        isCurrent = (((activeBeatIndex != null) && (beatNumber == activeBeatIndex + 1))),
                         isAccented = isAccented,
                         isMuted = isMuted,
                         onClick = { onToggleBeat(beatIndex) }
@@ -286,21 +291,16 @@ private fun GroupRowCard(
 @Composable
 private fun MiniBeatCircle(
     beatNumber: Int,
+    isCurrent: Boolean,
     isAccented: Boolean,
     isMuted: Boolean,
     onClick: () -> Unit
 ) {
-    val containerColor = when {
-        isMuted -> Color(0xFF1E1E1E)
-        isAccented -> MaterialTheme.colorScheme.primary
-        else -> Color.Transparent
-    }
-
-    val contentColor = when {
-        isMuted -> Color.LightGray
-        isAccented -> MaterialTheme.colorScheme.onPrimary
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val colors = BeatColorMapping.getBeatContentAndContainerColorPair(
+        state = if (isAccented) BeatState.ACCENTED else if (isMuted) BeatState.MUTED else BeatState.NORMAL,
+        isCurrent = isCurrent,
+        isDownbeat = isAccented
+    )
 
     Box(
         contentAlignment = Alignment.Center,
@@ -313,13 +313,13 @@ private fun MiniBeatCircle(
                 else Modifier.border(1.5.dp, if (isMuted) Color.DarkGray else Color.Gray, CircleShape)
             )
             .then(
-                if (containerColor != Color.Transparent) Modifier.clip(CircleShape).then(
+                if (colors.second != Color.Transparent) Modifier.clip(CircleShape).then(
                     Modifier.border(0.dp, Color.Transparent, CircleShape)
                 ) else Modifier
             )
     ) {
         Surface(
-            color = containerColor,
+            color = colors.second,
             shape = CircleShape,
             modifier = Modifier.fillMaxSize()
         ) {
@@ -328,7 +328,7 @@ private fun MiniBeatCircle(
                     text = "$beatNumber",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (isAccented) FontWeight.Bold else FontWeight.Normal,
-                    color = contentColor
+                    color = colors.first
                 )
             }
         }

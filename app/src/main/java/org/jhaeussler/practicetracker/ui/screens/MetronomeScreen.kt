@@ -181,6 +181,7 @@ fun MetronomeScreen(
                 MetronomeTab.GROUPING -> {
                     GroupingSection(
                         primaryMeter = config.primaryMeter,
+                        activeBeatIndex = activeBeat,
                         onAdjustGroupSize = { index, delta -> viewModel.adjustGroupSize(index, delta) },
                         onSplitGroup = { viewModel.splitGroup(it) },
                         onMergeGroupWithPrevious = { viewModel.mergeGroupWithPrevious(it) },

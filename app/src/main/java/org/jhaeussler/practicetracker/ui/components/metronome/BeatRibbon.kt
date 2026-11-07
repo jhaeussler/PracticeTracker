@@ -109,27 +109,14 @@ private fun InteractiveBeatButton(
     isDownbeat: Boolean,
     onClick: () -> Unit
 ) {
-    val targetContainerColor = when {
-        isCurrent && state == BeatState.MUTED -> Color.Gray
-        isCurrent && isDownbeat -> MaterialTheme.colorScheme.onSurface // Bright Red Downbeat
-        isCurrent && state == BeatState.ACCENTED -> MaterialTheme.colorScheme.primary
-        isCurrent -> Color.White // Normal Active Pulse
-        state == BeatState.ACCENTED -> MaterialTheme.colorScheme.primary
-        state == BeatState.MUTED -> Color.DarkGray
-        else -> MaterialTheme.colorScheme.surfaceContainerHigh // Inactive Normal
-    }
-
-    val targetContentColor = when {
-        isCurrent && (isDownbeat || state == BeatState.ACCENTED) -> Color.White
-        isCurrent && state == BeatState.MUTED -> Color.DarkGray
-        isCurrent -> Color.Black
-        state == BeatState.MUTED -> Color.Gray
-        state == BeatState.ACCENTED -> MaterialTheme.colorScheme.surfaceContainerHigh
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val colors = BeatColorMapping.getBeatContentAndContainerColorPair(
+        state = state,
+        isCurrent = isCurrent,
+        isDownbeat = isDownbeat
+    )
 
     val animatedBg by animateColorAsState(
-        targetValue = targetContainerColor,
+        targetValue = colors.second,
         animationSpec = tween(durationMillis = 60),
         label = "BeatButtonBg"
     )
@@ -139,7 +126,7 @@ private fun InteractiveBeatButton(
         shape = CircleShape,
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = animatedBg,
-            contentColor = targetContentColor
+            contentColor = colors.first
         ),
         modifier = Modifier
             .size(50.dp)
